@@ -12,6 +12,7 @@ A command-line interface tool for managing HTML5 games on the RUN.game platform.
   - [init](#init)
   - [deploy](#deploy)
   - [list-games](#list-games)
+  - [download-docs](#download-docs)
   - [update](#update)
   - [game](#game-commands)
 - [Usage Examples](#usage-examples)
@@ -90,9 +91,12 @@ rundot login
 
 This will open a browser window for you to sign in with your RUN.gamecredentials. Your session will be saved locally in `~/.rundot/` (or `%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed.
 
+You can also authenticate using an API key (`--api-key`) or a refresh token (`--refresh-token`) as alternatives to browser-based authentication.
+
 **Login Options:**
 
-- `--force`: Force a new login even if you're already authenticated
+- `--api-key`: API key for authentication (alternative to browser-based auth)
+- `--refresh-token`: Refresh token for direct authentication
 - `--env`: Specify the environment to login to
 
 **Note:** Your credentials are stored securely on your local machine. The CLI never stores your password directly.
@@ -122,7 +126,7 @@ The RUN.gameCLI stores configuration data in the following locations:
 
 ### login
 
-Authenticate with your RUN.gameaccount.
+Authenticate with your RUN.gameaccount. Supports three authentication methods: browser-based (default), API key, or refresh token.
 
 ```bash
 rundot login
@@ -130,12 +134,13 @@ rundot login
 
 **Options:**
 
-- `--force`: Force a new login even if you're already authenticated
+- `--api-key`: API key for authentication (alternative to browser-based auth)
+- `--refresh-token`: Refresh token for direct authentication
 - `--env`: Specify the environment to login to
 
 **What it does:**
 
-1. Opens a browser window for authentication
+1. Authenticates via browser, API key, or refresh token
 2. Saves your session locally in `~/.rundot_cli/`
 3. Automatically refreshes your session when it expires
 
@@ -236,6 +241,14 @@ rundot list-games
 - Current version
 - Last update timestamp
 
+### download-docs
+
+Downloads the latest CLI and SDK documentation to a `.rundot-docs` folder in your current directory.
+
+```bash
+rundot download-docs
+```
+
 ### update
 
 Update the RUN.gameCLI to the latest version.
@@ -243,6 +256,11 @@ Update the RUN.gameCLI to the latest version.
 ```bash
 rundot update
 ```
+
+**Options:**
+
+- `--beta`: Switch to the beta update channel
+- `--stable`: Switch to the stable update channel
 
 **What it does:**
 
@@ -264,6 +282,23 @@ rundot update
 ## Game Commands
 
 Advanced commands for managing your game are available under the `game` subcommand.
+
+### game create
+
+Creates a new game on RUN.game. This is an alias for `init` under the `game` subcommand.
+
+```bash
+rundot game create
+```
+
+**Options:**
+
+- `--name`: The name of your game
+- `--description`: Description of your game
+- `--build-path`: Path to your game's distribution/build folder
+- `--uses-preloader`: Whether the game uses the RUN.gameSDK
+- `--override`: Should override old game config file if it exists
+- `--env`: Environment to create the game in
 
 ### game info
 
@@ -300,6 +335,7 @@ rundot game configure
 - `--game-id`: The game ID
 - `--build-path`: Path to your game's distribution/build folder
 - `--uses-preloader`: Whether the game uses the RUN.gameSDK
+- `--env`: Environment to use
 
 **What it does:**
 Creates or updates the `game.config.json` file in your current directory.
@@ -309,13 +345,16 @@ Creates or updates the `game.config.json` file in your current directory.
 Updates the name of your game.
 
 ```bash
-rundot game set-name --name "New Game Name"
+rundot game set-name "New Game Name"
 ```
+
+**Arguments:**
+
+- `name`: The new name for your game
 
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.json` if not provided)
-- `--name`: The new name for your game
 - `--env`: Environment to update
 
 ### game set-description
@@ -487,6 +526,37 @@ rundot game delete-tag <tag-name>
 - `--game-id`: The game ID (reads from `game.config.json` if not provided)
 - `--env`: Environment to delete from
 
+### game copy-tag
+
+Copies a tag configuration to another tag.
+
+```bash
+rundot game copy-tag <source> <target>
+```
+
+**Arguments:**
+
+- `source`: The source tag to copy from
+- `target`: The target tag to copy to
+
+**Options:**
+
+- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--env`: Environment to use
+
+### game list-editors
+
+Lists the editors of your game.
+
+```bash
+rundot game list-editors
+```
+
+**Options:**
+
+- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--env`: Environment to use
+
 ### game add-editors
 
 Add people who can edit your game.
@@ -620,7 +690,6 @@ rundot game remove-editors "former-teammate@example.com"
 
 1. **"Session expired" or authentication errors**
    - Run `rundot login` to authenticate
-   - If already logged in, try `rundot login --force` to force a new login session
    - Your session is automatically refreshed, but if you encounter issues, re-login
 
 2. **"Failed to upload file" error**
