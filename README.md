@@ -207,7 +207,7 @@ rundot deploy
 3. Creates a new version entry for your game
 4. Updates the `dev` tag to point to the new version
 5. Optionally sets the version as public (visible in explore page)
-6. Returns OneLink URLs for both public and unlisted access
+6. Returns the share URL (OneLink or pretty URL) for both public and unlisted access, with a scannable QR code printed in the terminal
 
 **Example:**
 
@@ -456,7 +456,7 @@ rundot game set-public
 - `--env`: Environment to update
 
 **What it does:**
-Makes your game discoverable in search results and visible on your public profile.
+Makes your game discoverable in search results and visible on your public profile. The share URL and a scannable QR code are printed in the terminal.
 
 ### game set-private
 
@@ -475,7 +475,7 @@ rundot game set-private
 
 ### game list-tags
 
-Lists all tags for your game.
+Lists all tags for your game. For each tag, the share URL and a scannable QR code are shown in the terminal.
 
 ```bash
 rundot game list-tags
