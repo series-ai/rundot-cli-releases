@@ -69,7 +69,7 @@ You should see the list of available commands and options.
 # 1. Login to RUN.game(required for authentication)
 rundot login
 
-# 2. Initialize a new game (creates game.config.json automatically)
+# 2. Initialize a new game (creates game.config.prod.json automatically)
 rundot init
 
 # 3. Deploy your game
@@ -103,7 +103,7 @@ You can also authenticate using an API key (`--api-key`) or a refresh token (`--
 
 ### Game Configuration
 
-The CLI uses a `game.config.json` file to store your game's configuration:
+The CLI uses a `game.config.prod.json` file to store your game's configuration:
 
 ```json
 {
@@ -120,7 +120,7 @@ This file is created automatically when you run `rundot init` and makes future d
 The RUN.gameCLI stores configuration data in the following locations:
 
 - **Session data**: `~/.rundot_cli/` (macOS/Linux) or `%USERPROFILE%\.rundot_cli\` (Windows)
-- **Game configuration**: `game.config.json` in your project directory
+- **Game configuration**: `game.config.prod.json` in your project directory
 
 ## Commands
 
@@ -167,7 +167,7 @@ rundot init
 
 1. Prompts for game details (name, description, build path) if not provided
 2. Creates a new game on RUN.game
-3. Creates a `game.config.json` file in your current directory with the game ID and settings
+3. Creates a `game.config.prod.json` file in your current directory with the game ID and settings
 
 **Interactive Mode:**
 If you don't provide options, the CLI will prompt you for:
@@ -187,7 +187,7 @@ rundot deploy
 
 **Options:**
 
-- `--game-id`: The game ID to deploy (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID to deploy (reads from `game.config.prod.json` if not provided)
 - `--build-path`: Path to your game's distribution/build folder
 - `--bump`: Version bump type - `major`, `minor`, or `patch` (default: `minor`)
 - `--uses-preloader`: Whether the game uses the RUN.gameSDK
@@ -207,12 +207,12 @@ rundot deploy
 3. Creates a new version entry for your game
 4. Updates the `dev` tag to point to the new version
 5. Optionally sets the version as public (visible in explore page)
-6. Returns the share URL (OneLink or pretty URL) for both public and unlisted access, with a scannable QR code printed in the terminal
+6. Returns the share URL for both public and unlisted access, with a scannable QR code printed in the terminal
 
 **Example:**
 
 ```bash
-# Deploy with default settings (uses game.config.json)
+# Deploy with default settings (uses game.config.prod.json)
 rundot deploy
 
 # Deploy with a patch bump
@@ -310,7 +310,7 @@ rundot game info
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to fetch info from
 
 **Output includes:**
@@ -338,7 +338,7 @@ rundot game configure
 - `--env`: Environment to use
 
 **What it does:**
-Creates or updates the `game.config.json` file in your current directory.
+Creates or updates the `game.config.prod.json` file in your current directory.
 
 ### game set-name
 
@@ -354,7 +354,7 @@ rundot game set-name "New Game Name"
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to update
 
 ### game set-description
@@ -367,7 +367,7 @@ rundot game set-description --description "New description"
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--description`: The new description for your game
 - `--env`: Environment to update
 
@@ -381,7 +381,7 @@ rundot game list-versions
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to list versions from
 
 ### game upload-build
@@ -394,7 +394,7 @@ rundot game upload-build
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--build-path`: Path to your game's distribution/build folder
 - `--bump`: Version bump type - `major`, `minor`, or `patch` (default: `minor`)
 - `--uses-preloader`: Whether the game uses the RUN.gameSDK
@@ -412,7 +412,7 @@ rundot game list-server-configs
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to list configs from
 
 ### game upload-server-config
@@ -425,7 +425,7 @@ rundot game upload-server-config
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to upload to
 
 ### game list-runtime-configs
@@ -438,7 +438,7 @@ rundot game list-runtime-configs
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to list configs from
 
 ### game set-public
@@ -451,7 +451,7 @@ rundot game set-public
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--version`: Which version to set public (latest by default)
 - `--env`: Environment to update
 
@@ -468,10 +468,10 @@ rundot game set-private
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to update
 
-**Note:** The game will still be accessible via OneLink, but won't appear in search results.
+**Note:** The game will still be accessible via its share link, but won't appear in search results.
 
 ### game list-tags
 
@@ -483,7 +483,7 @@ rundot game list-tags
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--tag`: Filter by specific tag
 - `--env`: Environment to list tags from
 
@@ -501,7 +501,7 @@ rundot game update-tag <tag-name>
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--version`: Version ID to point the tag to
 - `--server-config-id`: Server config ID to use
 - `--runtime-config-id`: Runtime config ID to use
@@ -523,7 +523,7 @@ rundot game delete-tag <tag-name>
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to delete from
 
 ### game copy-tag
@@ -541,7 +541,7 @@ rundot game copy-tag <source> <target>
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to use
 
 ### game list-editors
@@ -554,7 +554,7 @@ rundot game list-editors
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to use
 
 ### game add-editors
@@ -571,7 +571,7 @@ rundot game add-editors <emails>
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to update
 
 ### game remove-editors
@@ -588,7 +588,7 @@ rundot game remove-editors <emails>
 
 **Options:**
 
-- `--game-id`: The game ID (reads from `game.config.json` if not provided)
+- `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to update
 
 ## Usage Examples
@@ -642,7 +642,7 @@ rundot deploy
 # Iterate on your game...
 # Build your changes
 
-# Quick deploy (uses game.config.json for all settings)
+# Quick deploy (uses game.config.prod.json for all settings)
 rundot deploy
 
 # Check your game info
@@ -700,17 +700,17 @@ rundot game remove-editors "former-teammate@example.com"
 3. **"Game dist folder does not exist" error**
    - Verify the path to your game's build folder is correct
    - Ensure you're using the full path or correct relative path
-   - Check that the path in `game.config.json` is correct if using auto-detection
+   - Check that the path in `game.config.prod.json` is correct if using auto-detection
 
 4. **"Unable to load game config" error**
-   - Make sure you're running the command from the directory containing `game.config.json`
+   - Make sure you're running the command from the directory containing `game.config.prod.json`
    - Run `rundot init` to create a new game config
    - Or use `rundot game configure` to update an existing config
-   - Verify the `game.config.json` file is valid JSON
+   - Verify the `game.config.prod.json` file is valid JSON
 
 5. **"Game not found" error**
    - Ensure you've created the game using `rundot init` first
-   - Verify the game ID in `game.config.json` is correct
+   - Verify the game ID in `game.config.prod.json` is correct
    - Check if you have access to edit this game with `rundot list-games`
 
 6. **"No changes detected in build folder" warning**
@@ -739,7 +739,7 @@ rundot game remove-editors "former-teammate@example.com"
 
 ### Additional Tips
 
-- **Always work from your project directory**: The CLI looks for `game.config.json` in your current directory
+- **Always work from your project directory**: The CLI looks for `game.config.prod.json` in your current directory
 - **Use `--help` liberally**: Every command has detailed help available with the `--help` flag
 - **Keep the CLI updated**: Run `rundot update` regularly to get the latest features and bug fixes
-- **Backup your game.config.json**: Keep this file in version control for team collaboration
+- **Backup your game.config.prod.json**: Keep this file in version control for team collaboration
