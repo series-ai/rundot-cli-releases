@@ -15,6 +15,7 @@ A command-line interface tool for managing HTML5 games on the RUN.game platform.
   - [download-docs](#download-docs)
   - [update](#update)
   - [game](#game-commands)
+  - [generate](#generate-commands)
 - [Usage Examples](#usage-examples)
 - [Troubleshooting](#troubleshooting)
 
@@ -590,6 +591,257 @@ rundot game remove-editors <emails>
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to update
+
+## Generate Commands
+
+AI asset-generation commands live under the `generate` subcommand: images, audio
+(music, SFX, text-to-speech), video, and sprites. These let you produce game-ready
+assets from text prompts (and optional reference media) directly from the terminal.
+
+```bash
+rundot generate <kind> [options]
+```
+
+> **Beta:** `generate` and its subcommands are currently in beta and hidden from
+> `rundot --help` by default. They are fully invokable; to make them appear in help
+> output, set `RUNDOT_BETA_FEATURES=1` (or `true`) in your environment.
+
+### Behavior shared by all generate commands
+
+- **Auth required.** Run `rundot login` first. Generation runs against the active
+  environment's venus-server; if that environment has no generation endpoint
+  configured, switch with `rundot set-env <prod|staging|dev|local>`.
+- **Game ID resolution.** `--game-id` is read from `game.config.prod.json` in the
+  current directory when omitted. If neither is present, the command errors.
+- **Output file.** The result is downloaded to `--out` if provided; otherwise a file
+  name is derived from the prompt (e.g. `a-brave-knight.png`). Parent directories are
+  created as needed.
+- **Sidecar metadata.** A `<output>.json` sidecar is written next to each generated
+  asset, recording the generation ID, prompt, model/provider, and other metadata.
+- **`--json`.** Every command supports `--json` for machine-readable output (useful
+  for scripting and agents).
+
+### generate image
+
+Generate an image from a text prompt, with optional reference images and background
+removal. Output defaults to `<prompt-slug>.png`.
+
+```bash
+rundot generate image --prompt "A brave knight in golden armor, fantasy game art"
+```
+
+**Options:**
+
+- `--prompt` (required): Text prompt for image generation.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--out`: Output file path.
+- `--aspect-ratio`: Aspect ratio (e.g. `16:9`, `1:1`).
+- `--model`: Model to use for generation (default: `gemini-3.1-flash-image-preview`).
+- `--image-size`: Native output resolution `1K`, `2K`, or `4K` (only supported by `gemini-3-pro-image-preview`).
+- `--negative-prompt`: Negative guidance text (max 1000 chars).
+- `--seed`: Reproducibility seed.
+- `--reference-image`: Reference image — local file path, HTTPS URL, data URI, or creator-storage key. Repeat up to 10 times. Local files are uploaded automatically.
+- `--remove-background`: Remove background from the generated image (uses model defaults; pair with the `--remove-background-*` options to tune).
+- `--remove-background-model`: `bria` (fast) or `birefnet` (high quality). Default: `bria`.
+- `--remove-background-variant`: BiRefNet variant `light`, `heavy`, or `portrait` (only with `--remove-background-model birefnet`).
+- `--remove-background-resolution`: BiRefNet resolution `1024x1024` or `2048x2048` (only with `--remove-background-model birefnet`).
+- `--json`: Machine-readable JSON output.
+
+### generate music
+
+Generate music from a text prompt. Output defaults to `<prompt-slug>.mp3`.
+
+```bash
+rundot generate music --prompt "Upbeat 8-bit chiptune boss theme" --duration 30
+```
+
+**Options:**
+
+- `--prompt` (required): Text prompt for music generation.
+- `--duration` (required): Duration in seconds (3–300).
+- `--provider`: Audio provider (default: `elevenlabs`).
+- `--client-ref`: Opaque correlation ID echoed back in job events.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--out`: Output file path.
+- `--json`: Machine-readable JSON output.
+
+### generate sfx
+
+Generate a sound effect. Output defaults to `<description-slug>.mp3`.
+
+```bash
+rundot generate sfx --description "Glass shattering on stone, sharp and bright" --duration 2
+```
+
+**Options:**
+
+- `--description`: Description of the sound effect (materials, intensity, context). Either `--description` or `--prompt` is required.
+- `--prompt`: **Deprecated** — use `--description`. If both are given, `--description` wins and `--prompt` is ignored.
+- `--duration`: Duration in seconds (0.5–30).
+- `--provider`: Audio provider (default: `elevenlabs`).
+- `--client-ref`: Opaque correlation ID echoed back in job events.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--out`: Output file path.
+- `--json`: Machine-readable JSON output.
+
+### generate video
+
+Generate a video from a text prompt. Supports text-to-video, image-to-video, and
+reference-to-video across multiple providers. Output defaults to `<prompt-slug>.mp4`.
+
+```bash
+rundot generate video --prompt "A spaceship flying through an asteroid field" \
+  --provider seedance-2.0 --duration 6 --resolution 720p
+```
+
+**Options:**
+
+- `--prompt` (required): Text prompt for video generation.
+- `--provider`: `seedance-2.0`, `seedance-2.0-fast`, or `kling-3.0-standard`. Default: `seedance-2.0`.
+- `--mode`: `text-to-video`, `image-to-video`, or `reference-to-video`. Default: `text-to-video`.
+- `--duration`: Duration in seconds. Seedance: 4–15. Kling: 3–15.
+- `--seed`: Reproducibility seed.
+- `--negative-prompt`: Negative guidance text (Kling only).
+- `--aspect-ratio`: e.g. `16:9`, `9:16`. Seedance also supports `21:9`, `4:3`, `3:4`. Kling: `16:9`, `9:16`, `1:1`.
+- `--resolution`: `480p`, `720p`, or `1080p` (Seedance only).
+- `--generate-audio`: Generate accompanying audio.
+- `--camera-fixed`: Fix the camera position (Seedance only).
+- `--cfg-scale`: Classifier-free guidance scale (Kling only).
+- `--shot-type`: `customize` or `intelligent` (Kling only).
+- `--start-image-url`: Starting frame image URL (HTTPS). **Required** for `--mode image-to-video`.
+- `--end-image-url`: Ending frame image URL (HTTPS; Seedance/Kling support varies).
+- `--image-reference`: Style/content reference image (HTTPS URL). Repeat up to 9 times (Seedance reference-to-video).
+- `--video-reference`: Motion reference video (HTTPS URL). Repeat up to 3 times (Seedance reference-to-video).
+- `--audio-reference`: Voice-cloning audio reference (HTTPS URL, 3–5s each, total ≤ 15s). Repeat up to 3 times.
+- `--multi-prompt`: Kling-only multi-prompt segment in the form `prompt=<text>,duration=<seconds>`. Repeat for multiple segments.
+- `--client-ref`: Opaque correlation ID echoed back in job events.
+- `--request-origin`: Origin tag for analytics/audit.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--out`: Output file path.
+- `--json`: Machine-readable JSON output.
+
+### generate sprite
+
+Generate a game sprite (optionally pixel art) with style references and reskin
+support. Output defaults to `<prompt-slug>.png`.
+
+```bash
+rundot generate sprite --prompt "A cute slime enemy, side view" --pixel --width 64 --height 64
+```
+
+**Options:**
+
+- `--prompt` (required): Text prompt for sprite generation.
+- `--pixel`: Generate a pixel-art sprite.
+- `--width`, `--height`: Sprite dimensions in pixels.
+- `--bg`: Background color (e.g. `transparent`).
+- `--smart-crop`: Auto-crop to content bounds. Default `true`; set `false` for exact dimensions.
+- `--pixel-perfect`: Grid-aligned pixel post-processing. Default `true`; set `false` for exact dimensions.
+- `--style`: Art style (e.g. `16-bit SNES`).
+- `--model`: Model to use for generation.
+- `--theme`: Visual theme hint.
+- `--colors`: Comma-separated hex color palette (max 8).
+- Reference slot (style hint, choose at most one): `--reference-asset-id`, `--reference-file-key`, or `--reference-file` (local image uploaded automatically).
+- Edit slot (structure-preserving reskin anchor, choose at most one): `--edit-asset-id`, `--edit-file-key`, or `--edit-file` (local image uploaded automatically). The edit and reference slots may be combined.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--out`: Output file path.
+- `--json`: Machine-readable JSON output.
+
+### generate animate-sprite
+
+Animate an existing sprite into a spritesheet.
+
+```bash
+rundot generate animate-sprite --prompt "walk cycle, side view" \
+  --source-generation-id <id> --frames 8 --format spritesheet
+```
+
+**Options:**
+
+- `--prompt` (required): Animation prompt (e.g. `walk cycle, side view`).
+- Source (exactly one required): `--source-generation-id`, `--source-file-key`, or `--source-url` (HTTPS).
+- `--frames`: Number of animation frames.
+- `--format`: Output format (e.g. `spritesheet`).
+- `--remove-bg`: Background removal — `None`, `Basic`, or `Pro`. Default: `Basic`.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--out`: Output file path.
+- `--json`: Machine-readable JSON output.
+
+### generate tts
+
+Generate text-to-speech audio with a chosen voice. Output defaults to
+`tts-<generationId>.mp3`.
+
+```bash
+rundot generate tts --text "Welcome, adventurer!" --voice-id <voice-id>
+```
+
+**Options:**
+
+- `--text` (required): Text to synthesize.
+- `--voice-id` (required): Voice ID to use (from `generate list-voices` or `generate save-voice`).
+- `--model`: TTS model `eleven_v3` or `eleven_multilingual_v2`. Default: `eleven_v3`.
+- `--provider`: Audio provider (default: `elevenlabs`).
+- `--stability`: Voice stability 0–1. Lower = more expressive. Default: `0.5`.
+- `--similarity-boost`: Voice similarity boost 0–1. Default: `0.8`.
+- `--speed`: Speech speed 0.5–2.0. Default: `1.0`.
+- `--client-ref`: Opaque correlation ID echoed back in job events.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--out`: Output file path.
+- `--json`: Machine-readable JSON output.
+
+### generate list-voices
+
+List the TTS voices available to your game.
+
+```bash
+rundot generate list-voices
+```
+
+**Options:**
+
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--json`: Machine-readable JSON output.
+
+**Output:** A table of `Voice ID`, `Name`, and `Category`. Use a voice ID with
+`generate tts --voice-id`.
+
+### generate design-voice
+
+Design custom voice candidates from a text description. Returns temporary voice IDs
+plus preview audio URLs; persist one with `generate save-voice`.
+
+```bash
+rundot generate design-voice --description "A warm, gravelly old wizard"
+```
+
+**Options:**
+
+- `--description` (required): Voice description (e.g. `A warm female voice`).
+- `--sample-text`: Sample text for the voice preview (auto-generated if omitted).
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--json`: Machine-readable JSON output.
+
+### generate save-voice
+
+Persist a designed voice so it can be used for TTS. Returns a permanent voice ID.
+
+```bash
+rundot generate save-voice --generated-voice-id <temp-id> --voice-name "Wizard"
+```
+
+**Options:**
+
+- `--generated-voice-id` (required): Temporary voice ID from a previous `design-voice` call.
+- `--voice-name` (required): Display name for the saved voice (1–100 chars).
+- `--voice-description`: Optional description (up to 1000 chars).
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--json`: Machine-readable JSON output.
+
+> **Related generation commands.** 3D-asset commands (`game generate-3d`,
+> `game remesh-3d`, `game rig-3d`, `game animate-3d`) and image-utility commands
+> (`image depth`, `image remove-bg`, `image upscale`) live outside the `generate`
+> group and are not yet documented here.
 
 ## Usage Examples
 
