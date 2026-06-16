@@ -92,7 +92,7 @@ rundot login
 
 This will open a browser window for you to sign in with your RUN.gamecredentials. Your session will be saved locally in `~/.rundot/` (or `%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed.
 
-You can also authenticate using an API key (`--api-key`) or a refresh token (`--refresh-token`) as alternatives to browser-based authentication.
+You can also authenticate using an API key (`--api-key`) or a refresh token (`--refresh-token`) as alternatives to browser-based authentication. To create, list, regenerate, or revoke per-game API keys, see [`game api-keys`](#game-api-keys).
 
 **Login Options:**
 
@@ -135,7 +135,7 @@ rundot login
 
 **Options:**
 
-- `--api-key`: API key for authentication (alternative to browser-based auth)
+- `--api-key`: API key for authentication (alternative to browser-based auth). Mint one with [`rundot game api-keys create`](#game-api-keys).
 - `--refresh-token`: Refresh token for direct authentication
 - `--env`: Specify the environment to login to
 
@@ -591,6 +591,32 @@ rundot game remove-editors <emails>
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to update
+
+### game api-keys
+
+Manage per-game API keys (`rk_` deploy keys) used for headless CI/CD auth with
+`rundot login --api-key`. Key management requires an interactive owner login — it is
+intentionally blocked when you are authenticated with an `rk_` key.
+
+```bash
+rundot game api-keys create --label "GitHub Actions" --expires-in-days 90
+rundot game api-keys list
+rundot game api-keys regenerate --key-id <KEY_ID>
+rundot game api-keys revoke --key-id <KEY_ID>
+```
+
+**Subcommands:**
+
+- `create`: Create a key. Prints the secret (`rk_<gameId>_<hex>`) **once** — save it immediately.
+  - `--label`: Human-readable label
+  - `--expires-in-days`: Days until expiry (1–365, default 365)
+- `list`: List keys with id, label, status (active/expired/revoked), and dates.
+- `regenerate`: Revoke a key and issue a replacement secret in one step.
+  - `--key-id` (required), `--yes` to skip confirmation
+- `revoke`: Revoke a key immediately.
+  - `--key-id` (required), `--yes` to skip confirmation
+
+All subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env`.
 
 ## Generate Commands
 
