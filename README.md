@@ -120,8 +120,9 @@ This file is created automatically when you run `rundot init` and makes future d
 
 The RUN.gameCLI stores configuration data in the following locations:
 
-- **Session data**: `~/.rundot_cli/` (macOS/Linux) or `%USERPROFILE%\.rundot_cli\` (Windows)
+- **Session data**: `~/.rundot/` (macOS/Linux) or `%APPDATA%\.rundot\` (Windows)
 - **Game configuration**: `game.config.prod.json` in your project directory
+- **Project-local config & marketing**: the visible `rundot/` folder in your project directory (server config, `marketing/`, `cli_hooks.json`, `simulation/`). The legacy hidden `.rundot/` folder is still read; run `rundot migrate-config` to rename it to `rundot/`.
 
 ## Commands
 
@@ -142,7 +143,7 @@ rundot login
 **What it does:**
 
 1. Authenticates via browser, API key, or refresh token
-2. Saves your session locally in `~/.rundot_cli/`
+2. Saves your session locally in `~/.rundot/`
 3. Automatically refreshes your session when it expires
 
 **Note:** You need to login before using commands like `init`, `deploy`, and `list-games`.
