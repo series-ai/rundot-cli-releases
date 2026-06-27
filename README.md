@@ -14,8 +14,12 @@ A command-line interface tool for managing HTML5 games on the RUN.game platform.
   - [list-games](#list-games)
   - [download-docs](#download-docs)
   - [update](#update)
+  - [skills](#skills-commands)
+  - [ai setup](#ai-setup)
   - [game](#game-commands)
   - [generate](#generate-commands)
+  - [intel](#intel-commands)
+  - [socials](#social-launch-packet-commands)
 - [Usage Examples](#usage-examples)
 - [Troubleshooting](#troubleshooting)
 
@@ -92,15 +96,18 @@ rundot login
 
 This will open a browser window for you to sign in with your RUN.gamecredentials. Your session will be saved locally in `~/.rundot/` (or `%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed.
 
-You can also authenticate using an API key (`--api-key`) or a refresh token (`--refresh-token`) as alternatives to browser-based authentication. To create, list, regenerate, or revoke per-game API keys, see [`game api-keys`](#game-api-keys).
+You can also authenticate using an API key or a refresh token as alternatives to browser-based authentication. To create, list, regenerate, or revoke per-game API keys, see [`game api-keys`](#game-api-keys).
 
 **Login Options:**
 
-- `--api-key`: API key for authentication (alternative to browser-based auth)
-- `--refresh-token`: Refresh token for direct authentication
+- `--api-key-stdin`: Read the API key from stdin (preferred for headless/CI — keeps the key out of shell history). Example: `printf '%s' "$RUNDOT_API_KEY" | rundot login --api-key-stdin`
+- `--api-key`: **Discouraged.** Passes the API key as a command-line argument, which leaks it into shell history and the process list. Prefer `--api-key-stdin`.
+- `--refresh-token`: **Discouraged.** Passes a long-lived refresh token on the command line (same shell-history leak).
 - `--env`: Specify the environment to login to
 
-**Note:** Your credentials are stored securely on your local machine. The CLI never stores your password directly.
+**Credential storage:** Your session is saved locally under `~/.rundot/` (or
+`%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed. The CLI
+never stores your password directly.
 
 ### Game Configuration
 
@@ -136,14 +143,15 @@ rundot login
 
 **Options:**
 
-- `--api-key`: API key for authentication (alternative to browser-based auth). Mint one with [`rundot game api-keys create`](#game-api-keys).
-- `--refresh-token`: Refresh token for direct authentication
+- `--api-key-stdin`: Read the API key from stdin (preferred — keeps it out of shell history). Mint one with [`rundot game api-keys create`](#game-api-keys).
+- `--api-key`: **Discouraged** (shell-history leak). Pass the API key on the command line. Prefer `--api-key-stdin`.
+- `--refresh-token`: **Discouraged** (shell-history leak). Refresh token for direct authentication.
 - `--env`: Specify the environment to login to
 
 **What it does:**
 
-1. Authenticates via browser, API key, or refresh token
-2. Saves your session locally in `~/.rundot/`
+1. Authenticates via browser, API key (stdin or flag), or refresh token
+2. Saves your session locally under `~/.rundot/`
 3. Automatically refreshes your session when it expires
 
 **Note:** You need to login before using commands like `init`, `deploy`, and `list-games`.
@@ -280,6 +288,80 @@ rundot update
 - The update process is automatic and seamless
 
 **Note:** The CLI automatically checks for updates when you run any command and will display a notification if a new version is available.
+
+## Skills Commands
+
+RUN ships a set of public AI skills (`SKILL.md` guides your coding agent reads —
+Claude Code, Codex, Cursor, Pi) for building, deploying, and monetizing games.
+
+The skills are **embedded in the `rundot` binary**, so there is nothing to fetch
+and no separate version to track: `rundot update` updates your skills along with
+the CLI. Install copies each skill into your agent's skills directory
+(`.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.pi/skills/`), and a
+ledger under `rundot/skills/installed.json` records a checksum of every file so
+updates never overwrite edits you've made — your changes are always preserved
+unless you pass `--force`.
+
+### ai setup
+
+The one-command front door. Auto-detects which coding agents you use (from
+`.claude/`, `.agents/`, `.cursor/`, `.pi/`, or `CLAUDE.md`) and installs all RUN
+skills for them at project scope. Falls back to Claude if nothing is detected.
+
+```bash
+rundot ai setup            # confirm the detected agents, then install
+rundot ai setup --yes      # install without prompting
+```
+
+### skills list
+
+Lists every available skill and, per agent, its install state for the resolved
+scope: `not-installed`, `installed` (matches the embedded version), `needs-update`
+(an unmodified install from an older binary), or `modified` (you edited it).
+
+```bash
+rundot skills list
+rundot skills list --scope global --json
+```
+
+### skills install
+
+Installs a named skill (or all skills if omitted). With no `--agent`, it installs
+for every detected agent, falling back to Claude when none are detected.
+
+```bash
+rundot skills install                          # all skills, detected agents
+rundot skills install rundot-deploy            # one skill
+rundot skills install --agent cursor --agent claude
+rundot skills install --scope global           # install into your home dir
+```
+
+**Options:** `--agent <id>` (repeatable), `--scope project|global`, `--force`
+(overwrite files you've edited), `--json`.
+
+### skills update
+
+Re-installs the embedded version over skills already tracked in the ledger,
+preserving any files you've edited (unless `--force`). Never installs new skills —
+an empty ledger is a no-op.
+
+```bash
+rundot skills update
+rundot skills update rundot-deploy --agent claude
+rundot skills update --force                    # take the embedded version everywhere
+```
+
+### skills uninstall
+
+Removes tracked skill files. Files you've edited are left on disk and reported
+(not deleted) unless `--force`.
+
+```bash
+rundot skills uninstall rundot-deploy --agent claude --yes
+```
+
+**Options:** `--agent <id>` (repeatable), `--scope project|global`, `--yes`,
+`--force`, `--json`.
 
 ## Game Commands
 
@@ -608,16 +690,59 @@ rundot game api-keys revoke --key-id <KEY_ID>
 
 **Subcommands:**
 
-- `create`: Create a key. Prints the secret (`rk_<gameId>_<hex>`) **once** — save it immediately.
+- `create`: Create a **deploy** key (`rk_<gameId>_<hex>`). Prints the secret **once** — save it immediately.
   - `--label`: Human-readable label
   - `--expires-in-days`: Days until expiry (1–365, default 365)
-- `list`: List keys with id, label, status (active/expired/revoked), and dates.
-- `regenerate`: Revoke a key and issue a replacement secret in one step.
+- `list`: List keys with id, label, type (deploy/playground), status (active/expired/revoked), and dates.
+- `regenerate`: Revoke a key and issue a replacement secret **of the same type** in one step.
   - `--key-id` (required), `--yes` to skip confirmation
 - `revoke`: Revoke a key immediately.
   - `--key-id` (required), `--yes` to skip confirmation
 
 All subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env`.
+
+#### Two key types: `rk_` (deploy) vs `pk_` (playground)
+
+Keys are **prefix-typed** — the type is intrinsic to the key, not a setting:
+
+- **`rk_` (deploy/CI)** — deploy, marketing, content-gen capable. Minted by
+  `api-keys create`. Lives in `RUNDOT_API_KEY`.
+- **`pk_` (playground)** — a low-blast-radius credential that can **only** open a
+  headless playground-login session; rejected by every deploy/marketing/spend route,
+  and the playground sign-in endpoint accepts only `pk_` keys. Minted by
+  [`rundot playground grant-access`](#playground); lives in `RUNDOT_PLAYGROUND_KEY`.
+
+A leaked `pk_` key can only create a wipeable playground session — it cannot spend
+money or ship a build. Use it (never an `rk_` deploy key) for the headless dev-server
+on-ramp.
+
+### playground
+
+The headless dev-server on-ramp. `grant-access` mints a short-lived **playground
+key** (a `pk_…` key, label `headless-dev`, 14-day expiry) for the current game and
+writes it to `.env.local` as `RUNDOT_PLAYGROUND_KEY=<secret>`. The SDK playground
+plugin reads that key from `.env.local` so `npm run dev` signs in headlessly with
+no `vite.config` editing. The key never leaves your dev server. (It must run
+against the prod environment — playground sign-in is prod-federated.)
+
+```bash
+rundot playground grant-access     # mint + write .env.local (0600, git-ignored)
+rundot playground revoke-access    # revoke server-side + strip the line
+```
+
+This writes a **durable secret to disk** — it is for deliberate headless use. The
+default interactive Google sign-in in the dev toolbar needs no key at all; prefer
+it when you can. `grant-access` refuses to write into a git-tracked `.env.local`
+(use `--force` to override) and refuses to persist anything the server didn't hand
+back as a `pk_` key (so a deploy-capable key never lands in the playground slot).
+
+`revoke-access` reads the key from `.env.local` (refusing if it isn't a `pk_`
+key), revokes it by the keyId recorded at grant time (falling back to an
+unambiguous prefix match via `api-keys list`), then removes the line. The raw
+secret can't be revoked directly — only hashed secrets are stored. A subsequent
+`npm run dev` falls back to the toolbar Google sign-in.
+
+Both subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env`.
 
 ## Generate Commands
 
@@ -629,9 +754,13 @@ assets from text prompts (and optional reference media) directly from the termin
 rundot generate <kind> [options]
 ```
 
-> **Beta:** `generate` and its subcommands are currently in beta and hidden from
-> `rundot --help` by default. They are fully invokable; to make them appear in help
-> output, set `RUNDOT_BETA_FEATURES=1` (or `true`) in your environment.
+> **Note:** `generate` and its subcommands are now generally available and appear
+> in `rundot --help`. A few other command groups remain beta-gated — hidden until
+> you set `RUNDOT_BETA_FEATURES=1` (or `true`) in your environment: `marketing`,
+> `socials`, `analytics`, `ugc`, `stats`, `collectibles`, and the `image` utility
+> group (`image depth` / `remove-bg` / `upscale` / `turnaround`). The `image`
+> utilities are also prod-only and require an interactive `rundot login` (they
+> reject `rk_` API-key sessions).
 
 ### Behavior shared by all generate commands
 
@@ -865,10 +994,332 @@ rundot generate save-voice --generated-voice-id <temp-id> --voice-name "Wizard"
 - `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
 - `--json`: Machine-readable JSON output.
 
+### generate text
+
+Run an LLM chat completion from a messages file. Result is written to **stdout**
+(there is no `--out`). A game ID must resolve (flag or `game.config.prod.json`) —
+completions are billed to the game.
+
+```bash
+rundot generate text --model claude-sonnet-4-5 --messages-file ./messages.json
+```
+
+The messages file is a JSON `AiMessage[]` array.
+
+**Options:**
+
+- `--model` (required): Model identifier (see `generate text-models`).
+- `--messages-file` (required): Path to a JSON file containing an `AiMessage[]` array.
+- `--system`: System prompt — a literal string, or `@path/to/file.txt` to read it from a file.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--response-format`: `text` (default), `json_object`, or `json_schema`.
+- `--schema-file`: Path to a JSON Schema file. **Required** with `--response-format json_schema`; rejected otherwise.
+- `--strict-schema`: Enable strict schema adherence (only valid with `--response-format json_schema`).
+- `--temperature`, `--top-p`, `--top-k`, `--max-tokens`, `--max-completion-tokens`: Sampling controls.
+- `--tools-file`: Path to a JSON `Tool[]` array. `--tool-choice`: `auto`, `any`, `none`, or a tool name.
+- `--stop`: Stop sequence (repeat up to 4×). `--seed`, `--presence-penalty`, `--frequency-penalty`, `--n` (1–10).
+- `--logprobs` / `--top-logprobs`, `--user`, `--safety-identifier`, `--tag` (repeatable).
+- `--stream`: Stream deltas to stdout via SSE.
+- `--json`: Machine-readable JSON output.
+
+### generate text-models
+
+List the text-completion models available to your game.
+
+```bash
+rundot generate text-models          # one model id per line
+rundot generate text-models --json   # JSON array
+```
+
+### `image turnaround` _(beta)_
+
+Produce a new camera-angle view of a source image via the Qwen multi-angle
+model (`fal-ai/qwen-image-edit-2511-multiple-angles`). The output preserves the
+input image's aspect ratio. Beta-gated (set `RUNDOT_BETA_FEATURES=1`); prod-only;
+requires an interactive `rundot login` session and a game id.
+
+**Synopsis:**
+
+```bash
+rundot image turnaround --input <url|file|key> [--horizontal-angle N] [--vertical-angle N] [--num-images N] [--out path] [--force] [--game-id id]
+```
+
+**Options:**
+
+- `--input` (required): HTTPS URL, app file key, or local file path of the input image.
+- `--horizontal-angle`: Azimuth in degrees (0–360): `0`=front, `90`=right, `180`=back, `270`=left.
+- `--vertical-angle`: Elevation in degrees (-30–90): `-30`=low-angle, `0`=eye-level, `90`=bird's-eye.
+- `--num-images`: Number of variants to generate in one call (1–4, default 1).
+- `--out`: Output path for the result (default: `{input-stem}_turnaround.png`). With `--num-images > 1`, results are written as `{stem}_1.png`, `{stem}_2.png`, … next to that path.
+- `--force`: Overwrite existing output without prompting.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--env`: Environment — prod-only.
+
+At least one of `--horizontal-angle` / `--vertical-angle` is required (a
+turnaround with no angle is a no-op). Cost scales with the input resolution
+(priced per-megapixel) **and** with `--num-images` — N images are billed N× the
+single-image cost.
+
+**Example** — a 90° right-side view of a landscape background:
+
+```bash
+rundot image turnaround --input ./bg.png --horizontal-angle 90 --out ./bg_right.png --game-id my-game
+```
+
+**Example** — four angle variants in one call (billed 4×):
+
+```bash
+rundot image turnaround --input ./hero.png --horizontal-angle 45 --num-images 4 --out ./hero_angle.png --game-id my-game
+```
+
 > **Related generation commands.** 3D-asset commands (`game generate-3d`,
 > `game remesh-3d`, `game rig-3d`, `game animate-3d`) and image-utility commands
 > (`image depth`, `image remove-bg`, `image upscale`) live outside the `generate`
 > group and are not yet documented here.
+
+## Intel Commands
+
+Competitive market intelligence for creators — rankings, modeled downloads,
+Steam concurrency, ad-creative galleries, and full competitor dossiers.
+
+**Access & pricing.** Intel is gated to paying creators (creator tier or
+higher) and switchable via a server-side kill-switch. It's priced in RUN.game
+credits (1,000 credits = $1):
+
+| Action | Cost |
+|---|---|
+| `search`, `snapshot`, `whats-hot`, `balance` | Free (rate-limited) |
+| `dossier` download | A free weekly allowance per tier (creator 1 … max 5), then **1,000 credits** each |
+| `dossier --generate` (build a dossier that doesn't exist yet) | **10,000 credits**, charged only on success |
+| Weekly "What's Hot" email | Free with an active subscription |
+
+Every command is **agent-operable**: each supports `--json` for structured
+output, and all spending is flag-driven — no command ever charges credits
+without an explicit `--confirm-spend` or `--generate` flag. Without the flag, a
+paid action prints the structured cost (and your balance) and exits non-zero.
+
+### intel search
+
+```bash
+rundot intel search "Slay the Spire"     # match by game name
+rundot intel search "Mega Crit" --json   # match by developer; JSON output
+```
+
+Lists matching games (by name **or** developer). Each hit is flagged whether a
+dossier is `ready` to download or must be `generate`d. Free.
+
+### intel snapshot
+
+```bash
+rundot intel snapshot "Slay the Spire"
+rundot intel snapshot 553834731 --json
+```
+
+Free headline metrics: top rank, rating velocity, modeled downloads (`Est.`
+band), Steam concurrent players and owners where listed, and active-creative
+counts.
+
+### intel dossier
+
+```bash
+# Free within your weekly allowance:
+rundot intel dossier "Slay the Spire"
+
+# Beyond the allowance, authorize the 1,000-credit overage:
+rundot intel dossier "Slay the Spire" --confirm-spend
+
+# If no dossier exists yet, authorize generating one (10,000 credits):
+rundot intel dossier "Slay the Spire" --generate
+```
+
+The full report: snapshot + qualitative teardown (signed, time-limited document
+and screenshot URLs) + the UA creative gallery. Without `--confirm-spend` an
+overage prints the cost and exits non-zero; without `--generate` a missing
+dossier prints the generation cost and exits non-zero. Generation is charged
+only once the dossier is downloadable.
+
+### intel whats-hot
+
+```bash
+rundot intel whats-hot
+```
+
+The global "What's Hot" market digest (aggregate movers). Free.
+
+### intel balance
+
+```bash
+rundot intel balance
+```
+
+Your credit balance and free dossiers remaining this week.
+
+### intel subscribe
+
+```bash
+rundot intel subscribe         # opt in to the weekly What's Hot email
+rundot intel subscribe --off   # opt out
+```
+
+## Social Launch Packet Commands
+
+_(beta)_ Generate platform-specific launch posts for a game, work the posting
+checklist, and verify which steps are genuinely finished. All commands resolve the
+game from the local game config or accept `--game-id`.
+
+| Command | What it does |
+|---|---|
+| `rundot socials prepare` | Generate a launch packet (3 caption variants + a tracked link per platform) |
+| `rundot socials status` | Show the posting checklist (`--json` for machine output) |
+| `rundot socials next` | Show the next unposted platform to act on (`--json`) |
+| `rundot socials open` | Print composer URL + copy text for a platform (`--json`) |
+| `rundot socials promo` | Generate a platform-sized promo image |
+| `rundot socials mark-posted` | Record a published post URL for a platform |
+| `rundot socials verify` | Check which steps are **finished** |
+
+### When is a step finished?
+
+A step counts as **finished** once it's both:
+
+1. **Posted** — Discord auto-posts; the others are recorded via `mark-posted` (and,
+   where possible, confirmed live via the platform).
+2. **Clicked by someone who isn't you** — at least one click on the step's tracked
+   link from a profile that isn't the creator's.
+
+`verify` reports one of three states per platform:
+
+- `not posted` — nothing posted yet.
+- `awaiting click` — posted, but no non-creator click yet. **Not done** — it's
+  waiting for 1 click that isn't you.
+- `finished ✓` — posted and clicked by someone other than you.
+
+TikTok and Instagram have no tracked link (search-only), so they can be
+`mark-posted` but aren't finishable in this version.
+
+```bash
+# Human-readable table with a State column
+rundot socials verify
+
+# Verify a specific packet, machine-readable
+rundot socials verify --packet <packetId> --json
+
+# Verify a specific game
+rundot socials verify --game-id my-game
+```
+
+## Storage Commands
+
+Inspect and recover a player's `appStorage` (the per-player key-value store games
+read and write at runtime). These commands operate on a single player's bucket,
+identified by their profile ID.
+
+All storage commands accept `--scope` (`app` default, or `owner` — the bucket
+shared across every game the creator owns) and `--game-id` (reads from
+`game.config.prod.json` if omitted).
+
+### storage keys
+
+List every key in a player's bucket.
+
+```bash
+rundot storage keys <profile-id> [--scope app|owner] [--save <file>]
+```
+
+### storage get
+
+Read a single value.
+
+```bash
+rundot storage get <profile-id> <key> [--scope app|owner] [--format auto|json|raw] [--save <file>]
+```
+
+`--format` defaults to `auto`.
+
+### storage set
+
+Write a single key. The value is stored as a string.
+
+```bash
+rundot storage set <profile-id> <key> <value> [--scope app|owner]
+```
+
+### storage remove
+
+Remove a single key. **Not** confirmation-gated — it runs immediately.
+
+```bash
+rundot storage remove <profile-id> <key> [--scope app|owner]
+```
+
+### storage clear
+
+Wipe a player's entire bucket. **Destructive** — prompts for confirmation
+(aborts in a non-interactive shell unless you pass `--yes`).
+
+```bash
+rundot storage clear <profile-id> [--scope app|owner] [--yes]
+```
+
+### storage usage
+
+Show item/byte counts against quota for a player's bucket.
+
+```bash
+rundot storage usage <profile-id> [--scope app|owner] [--save <file>]
+```
+
+### storage export
+
+```bash
+rundot storage export <profile-id> [--game-id <id>] [--scope app|owner] [--as-of <iso>] [--save <file>]
+```
+
+Grabs a player's storage bucket and writes a portable snapshot JSON
+(`{ env, profileId, gameId, scope, asOf, capturedAt, data }`). With `--save`, the
+snapshot is written to a file and a summary is printed; without it, the snapshot
+JSON is printed to stdout.
+
+* `--scope` is `app` (default) or `owner`. **`owner` snapshots are
+  export/inspect-only and cannot be imported** — the owner bucket is shared
+  across every game the creator owns for that player.
+* `--as-of <iso>` reads the bucket as it existed at a past minute via Firestore
+  Point-In-Time Recovery (PITR). The reachable window is **the last 1 hour unless
+  PITR is enabled on the database, in which case up to 7 days** (counting forward
+  from when PITR was enabled). A timestamp outside that window returns a recovery
+  window error.
+* The snapshot file contains **player data (PII)** — store it somewhere
+  gitignored and delete it when you are done.
+* PITR data may include records the player later deleted. **Do not use `restore`
+  to undo a player's erasure.**
+
+### storage import
+
+```bash
+rundot storage import <profile-id> --file <snapshot> [--game-id <id>] [--yes]
+```
+
+Restores a snapshot's `data` into the target profile's `app` bucket via the
+restore endpoint. This is destructive — it **replaces** all of the target
+profile's `app` storage — so it prompts for confirmation unless `--yes` is
+passed.
+
+* Requires the **app owner** role (editors are rejected).
+* Only `app`-scope snapshots are importable; `owner` snapshots are rejected.
+* `import` refuses to proceed if the snapshot's `gameId` does not match the
+  resolved target game, or if the snapshot's `env` does not exactly match the
+  CLI's current environment (game IDs can be reused across environments).
+* Restoring into a different `profile-id` than the snapshot's (the normal repro
+  path — into a test profile you control) is allowed but warns first.
+
+### storage data
+
+```bash
+rundot storage data <profile-id> [--game-id <id>] [--scope app|owner] [--as-of <iso>] [--format table|json|raw] [--save <file>]
+```
+
+Views a player's current storage. `--as-of <iso>` views a past version via PITR
+without writing a snapshot file (same window and recovery-window behavior as
+`storage export --as-of`).
 
 ## Usage Examples
 
