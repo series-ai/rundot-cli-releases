@@ -253,7 +253,7 @@ rundot list-games
 
 ### download-docs
 
-Downloads the latest CLI and SDK documentation to a `.rundot-docs` folder in your current directory.
+Downloads the latest CLI and SDK documentation to a `rundot/docs` folder in your current directory.
 
 ```bash
 rundot download-docs
@@ -885,6 +885,19 @@ support. Output defaults to `<prompt-slug>.png`.
 rundot generate sprite --prompt "A cute slime enemy, side view" --pixel --width 64 --height 64
 ```
 
+Generate several candidates in one call with `--variations` (each file gets its
+own `.json` sidecar, and `--json` emits an `assets` array):
+
+```bash
+rundot generate sprite --prompt "A cute slime enemy, side view" --variations 3 --out hero-{n}.png
+```
+
+Generate a seamless/tileable texture:
+
+```bash
+rundot generate sprite --prompt "Mossy cobblestone ground" --mode texture
+```
+
 **Options:**
 
 - `--prompt` (required): Text prompt for sprite generation.
@@ -897,10 +910,15 @@ rundot generate sprite --prompt "A cute slime enemy, side view" --pixel --width 
 - `--model`: Model to use for generation.
 - `--theme`: Visual theme hint.
 - `--colors`: Comma-separated hex color palette (max 8).
+- `--variations`: Number of candidate images per call (1–4). With 2+ variations, `--out` must contain a `{n}` placeholder (1-based index, e.g. `hero-{n}.png`); when `--out` is omitted, `-{n}` is inserted before the extension of the derived name.
+- `--mode`: Generation mode — `assets`, `texture` (seamless/tileable), or `ui`.
+- `--resolution`: Output resolution — `1K`, `2K`, or `4K`.
+- `--quality`: Generation quality — `low`, `medium`, or `high`.
+- `--aspect-ratio`: Aspect ratio — `1:1`, `16:9`, or `9:16`.
 - Reference slot (style hint, choose at most one): `--reference-asset-id`, `--reference-file-key`, or `--reference-file` (local image uploaded automatically).
 - Edit slot (structure-preserving reskin anchor, choose at most one): `--edit-asset-id`, `--edit-file-key`, or `--edit-file` (local image uploaded automatically). The edit and reference slots may be combined.
 - `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
-- `--out`: Output file path.
+- `--out`: Output file path (supports a `{n}` placeholder).
 - `--json`: Machine-readable JSON output.
 
 ### generate animate-sprite
@@ -912,6 +930,13 @@ rundot generate animate-sprite --prompt "walk cycle, side view" \
   --source-generation-id <id> --frames 8 --format spritesheet
 ```
 
+Steer the animation away from artifacts and control the alpha matte:
+
+```bash
+rundot generate animate-sprite --prompt "walk cycle, side view" \
+  --source-generation-id <id> --negative-prompt "blurry, extra limbs" --matte-color "#00ff00"
+```
+
 **Options:**
 
 - `--prompt` (required): Animation prompt (e.g. `walk cycle, side view`).
@@ -919,8 +944,87 @@ rundot generate animate-sprite --prompt "walk cycle, side view" \
 - `--frames`: Number of animation frames.
 - `--format`: Output format (e.g. `spritesheet`).
 - `--remove-bg`: Background removal — `None`, `Basic`, or `Pro`. Default: `Basic`.
+- `--negative-prompt`: Negative guidance text for the animation.
+- `--matte-color`: Hex color (`#RRGGBB`) alpha is matted against during animation/background removal. Provider default: `#808080`.
 - `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
 - `--out`: Output file path.
+- `--json`: Machine-readable JSON output.
+
+### generate sprite-character-animate
+
+Animate a sprite into a full animation set using character workflow presets
+(idle, walk, jump, ...). Purpose-built for complete character pipelines: each
+animation reports its own result, so one failure does not void the run. Writes
+one spritesheet + `.json` sidecar per completed animation into `--out`.
+
+```bash
+rundot generate sprite-character-animate --game-id <id> \
+  --source-generation-id <id> --animations idle,walk --out ./character
+```
+
+**Options:**
+
+- Source (exactly one required): `--source-generation-id`, `--source-file-key`, or `--source-url` (HTTPS).
+- `--prompt`: Character description (guides the animation model). Defaults to the source generation's prompt when available.
+- `--animations` (required): Comma-separated animation preset names (see `generate character-workflows`).
+- `--workflow`: Workflow/perspective ID — `platformer` (default), `isometric`, or `topdown` (see `generate character-workflows`).
+- `--frames`: Frame count per animation.
+- `--format`: Output format (e.g. `spritesheet`).
+- `--remove-bg`: Background removal — `None`, `Basic`, or `Pro`.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--out`: Output directory.
+- `--json`: Machine-readable JSON output with per-animation status.
+
+### generate character-workflows
+
+List the available character animation presets (workflow IDs and their
+animation names).
+
+```bash
+rundot generate character-workflows --game-id <id> --json
+```
+
+### generate sprite-models
+
+List sprite-generation models and their per-call credit pricing, as reported
+by the provider. Model slugs and pricing change over time — query them instead
+of hardcoding.
+
+```bash
+rundot generate sprite-models --json
+```
+
+### generate sprite-costs
+
+Show per-operation sprite-generation credit costs without a billed call. Use
+this to preflight the cost of a batch.
+
+```bash
+rundot generate sprite-costs --json
+```
+
+Returns credits per `generate` call (each variation bills as one), per
+`animate` call, and per completed animation in a character-animate run.
+
+### generate sprite-jobs
+
+Drain completed/failed sprite-generation jobs (e.g. a character-animate whose
+CLI invocation was killed while the job finished server-side). Results stay
+available until the job expires; draining is non-destructive.
+
+```bash
+rundot generate sprite-jobs --drain --game-id <id> --json
+
+# Also download the outputs and write the same sidecars the original
+# command would have written:
+rundot generate sprite-jobs --drain --game-id <id> --download ./recovered
+```
+
+**Options:**
+
+- `--drain` (required): Fetch completed/failed sprite-generation jobs.
+- `--download <dir>`: Download job outputs into the directory + write `.json` sidecars.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
 - `--json`: Machine-readable JSON output.
 
 ### generate tts
@@ -1176,6 +1280,38 @@ game from the local game config or accept `--game-id`.
 | `rundot socials promo` | Generate a platform-sized promo image |
 | `rundot socials mark-posted` | Record a published post URL for a platform |
 | `rundot socials verify` | Check which steps are **finished** |
+| `rundot socials profile set` | Configure your creator social profile (Discord webhook, tone, hashtags, footer, CTAs) |
+| `rundot socials profile show` | Show the current social profile (the webhook is reported as configured/not, never printed) |
+
+### Configure your social profile
+
+Your social profile is **per-creator, not per-game** — set it once and it applies
+to every game you publish. It customizes the generated copy and enables Discord
+auto-posting. It's optional (`prepare` works without it), but setting at least a
+Discord webhook is recommended.
+
+```bash
+rundot socials profile set \
+  --discord-webhook "https://discord.com/api/webhooks/…" \
+  --discord-username "yourname" \
+  --discord-role-ping "123456789012345678" \
+  --tone "hyped but humble" \
+  --hashtags "indiegame,h5games" \
+  --cta "Play now,Drop a comment" \
+  --footer "Made with RUN.game"
+```
+
+| Option | Purpose |
+|---|---|
+| `--discord-webhook <url>` | Discord incoming webhook. Stored as a write-only secret and used to auto-post. |
+| `--discord-username <name>` | Your handle in RUN's community Discord. |
+| `--discord-role-ping <roleId>` | Discord role id to ping on announcements. |
+| `--tone <text>` | Copy tone, e.g. `"hyped but humble"`. |
+| `--hashtags a,b,c` | Hashtags to weave into captions. |
+| `--footer <text>` | Footer appended to copy. |
+| `--cta "a,b"` | Preferred calls-to-action. |
+
+Pass at least one option. Inspect the current profile any time with `rundot socials profile show`.
 
 ### When is a step finished?
 
