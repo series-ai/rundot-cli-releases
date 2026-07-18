@@ -1,6 +1,8 @@
-# RUN.game CLI
+# RUN.world CLI
 
-A command-line interface tool for managing HTML5 games on the RUN.game platform. This CLI helps developers create, update, and manage their games efficiently.
+A command-line interface tool for managing HTML5 games on the RUN.world platform. This CLI helps developers create, update, and manage their games efficiently.
+
+Looking for the SDK API docs? They ship inside the `@series-inc/rundot-game-sdk` npm package — run `npx rundot-sdk-setup` in your game project to install them (the CLI does not download docs).
 
 ## Table of Contents
 
@@ -12,7 +14,6 @@ A command-line interface tool for managing HTML5 games on the RUN.game platform.
   - [init](#init)
   - [deploy](#deploy)
   - [list-games](#list-games)
-  - [download-docs](#download-docs)
   - [update](#update)
   - [skills](#skills-commands)
   - [ai setup](#ai-setup)
@@ -29,7 +30,7 @@ A command-line interface tool for managing HTML5 games on the RUN.game platform.
 
 #### macOS/Linux
 
-Install RUN.gameCLI with a single command:
+Install RUN.world CLI with a single command:
 
 ```bash
 curl -fsSL https://github.com/series-ai/rundot-cli-releases/releases/latest/download/install.sh | bash
@@ -58,7 +59,7 @@ The installer will:
 
 #### Verify Installation
 
-After installation, verify that RUN.gameCLI is installed correctly:
+After installation, verify that RUN.world CLI is installed correctly:
 
 ```bash
 rundot --help
@@ -68,10 +69,10 @@ You should see the list of available commands and options.
 
 ## Quick Start
 
-### Publishing a NEW game to RUN.game
+### Publishing a NEW game to RUN.world
 
 ```bash
-# 1. Login to RUN.game(required for authentication)
+# 1. Login to RUN.world(required for authentication)
 rundot login
 
 # 2. Initialize a new game (creates game.config.prod.json automatically)
@@ -88,13 +89,13 @@ rundot list-games
 
 ### Authentication
 
-Before using the CLI, you need to authenticate with your RUN.gameaccount:
+Before using the CLI, you need to authenticate with your RUN.world account:
 
 ```bash
 rundot login
 ```
 
-This will open a browser window for you to sign in with your RUN.gamecredentials. Your session will be saved locally in `~/.rundot/` (or `%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed.
+This will open a browser window for you to sign in with your RUN.world credentials. Your session will be saved locally in `~/.rundot/` (or `%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed.
 
 You can also authenticate using an API key or a refresh token as alternatives to browser-based authentication. To create, list, regenerate, or revoke per-game API keys, see [`game api-keys`](#game-api-keys).
 
@@ -103,7 +104,7 @@ You can also authenticate using an API key or a refresh token as alternatives to
 - `--api-key-stdin`: Read the API key from stdin (preferred for headless/CI — keeps the key out of shell history). Example: `printf '%s' "$RUNDOT_API_KEY" | rundot login --api-key-stdin`
 - `--api-key`: **Discouraged.** Passes the API key as a command-line argument, which leaks it into shell history and the process list. Prefer `--api-key-stdin`.
 - `--refresh-token`: **Discouraged.** Passes a long-lived refresh token on the command line (same shell-history leak).
-- `--env`: Specify the environment to login to
+- `--env`: Specify the environment to login to (Series-internal)
 
 **Credential storage:** Your session is saved locally under `~/.rundot/` (or
 `%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed. The CLI
@@ -125,7 +126,7 @@ This file is created automatically when you run `rundot init` and makes future d
 
 ### Data Storage Locations
 
-The RUN.gameCLI stores configuration data in the following locations:
+The RUN.world CLI stores configuration data in the following locations:
 
 - **Session data**: `~/.rundot/` (macOS/Linux) or `%APPDATA%\.rundot\` (Windows)
 - **Game configuration**: `game.config.prod.json` in your project directory
@@ -133,9 +134,11 @@ The RUN.gameCLI stores configuration data in the following locations:
 
 ## Commands
 
+> **Note:** The `--env` flag is internal to Series and is hidden from external creators' `--help`.
+
 ### login
 
-Authenticate with your RUN.gameaccount. Supports three authentication methods: browser-based (default), API key, or refresh token.
+Authenticate with your RUN.world account. Supports three authentication methods: browser-based (default), API key, or refresh token.
 
 ```bash
 rundot login
@@ -146,7 +149,7 @@ rundot login
 - `--api-key-stdin`: Read the API key from stdin (preferred — keeps it out of shell history). Mint one with [`rundot game api-keys create`](#game-api-keys).
 - `--api-key`: **Discouraged** (shell-history leak). Pass the API key on the command line. Prefer `--api-key-stdin`.
 - `--refresh-token`: **Discouraged** (shell-history leak). Refresh token for direct authentication.
-- `--env`: Specify the environment to login to
+- `--env`: Specify the environment to login to (Series-internal)
 
 **What it does:**
 
@@ -158,7 +161,7 @@ rundot login
 
 ### init
 
-Initializes a new game on RUN.game. This is the first command you should run when setting up a new game.
+Initializes a new game on RUN.world. This is the first command you should run when setting up a new game.
 
 ```bash
 rundot init
@@ -169,14 +172,14 @@ rundot init
 - `--name`: The name of your game
 - `--description`: Description of your game
 - `--build-path`: Path to your game's distribution/build folder
-- `--uses-preloader`: Whether the game uses the RUN.gameSDK
+- `--uses-preloader`: Whether the game uses the RUN.world SDK
 - `--override`: Should override old game config file if it exists
-- `--env`: Environment to create the game in
+- `--env`: Environment to create the game in (Series-internal)
 
 **What it does:**
 
 1. Prompts for game details (name, description, build path) if not provided
-2. Creates a new game on RUN.game
+2. Creates a new game on RUN.world
 3. Creates a `game.config.prod.json` file in your current directory with the game ID and settings
 
 **Interactive Mode:**
@@ -185,7 +188,7 @@ If you don't provide options, the CLI will prompt you for:
 - Game Name
 - Game Description
 - Path to game build folder (default: `./dist`)
-- Whether your game uses the RUN.gameSDK
+- Whether your game uses the RUN.world SDK
 
 ### deploy
 
@@ -200,9 +203,9 @@ rundot deploy
 - `--game-id`: The game ID to deploy (reads from `game.config.prod.json` if not provided)
 - `--build-path`: Path to your game's distribution/build folder
 - `--bump`: Version bump type - `major`, `minor`, or `patch` (default: `minor`)
-- `--uses-preloader`: Whether the game uses the RUN.gameSDK
+- `--uses-preloader`: Whether the game uses the RUN.world SDK
 - `--public`: Make this version visible on the explore page
-- `--env`: Environment to deploy to
+- `--env`: Environment to deploy to (Series-internal)
 
 **Version Bumping:**
 
@@ -213,7 +216,7 @@ rundot deploy
 **What it does:**
 
 1. Zips your game distribution folder
-2. Uploads the new version to RUN.gamestorage
+2. Uploads the new version to RUN.world storage
 3. Creates a new version entry for your game
 4. Updates the `dev` tag to point to the new version
 5. Optionally sets the version as public (visible in explore page)
@@ -234,7 +237,7 @@ rundot deploy --public
 
 ### list-games
 
-Lists all your games on RUN.game.
+Lists all your games on RUN.world.
 
 ```bash
 rundot list-games
@@ -242,7 +245,7 @@ rundot list-games
 
 **Options:**
 
-- `--env`: Environment to list games from
+- `--env`: Environment to list games from (Series-internal)
 
 **Output includes:**
 
@@ -251,17 +254,9 @@ rundot list-games
 - Current version
 - Last update timestamp
 
-### download-docs
-
-Downloads the latest CLI and SDK documentation to a `rundot/docs` folder in your current directory.
-
-```bash
-rundot download-docs
-```
-
 ### update
 
-Update the RUN.gameCLI to the latest version.
+Update the RUN.world CLI to the latest version.
 
 ```bash
 rundot update
@@ -301,6 +296,43 @@ the CLI. Install copies each skill into your agent's skills directory
 ledger under `rundot/skills/installed.json` records a checksum of every file so
 updates never overwrite edits you've made — your changes are always preserved
 unless you pass `--force`.
+
+The catalog has three classes of skill: platform workflows
+(`rundot-deploy`, `rundot-monetization`, `rundot-marketing`), game-feature
+implementations (`rundot-feature-*` — copy-in TypeScript templates with
+integration guides, one skill per system), and references
+(`rundot-sdk`, `rundot-new-game`).
+
+Skill content lives under `venus_cli/Assets/Skills/` (one folder per skill +
+`manifest.json`). The `systems/`, `shared/`, `starter/`, and
+`references/run-sdk-notes.md` payloads inside the feature/new-game/sdk skills
+are **generated** — vendored from the private
+[run-game-helpers](https://github.com/series-ai/run-game-helpers) repo by
+`node scripts/vendor-game-helpers.mjs <path-to-checkout>` (provenance:
+`Assets/Skills/vendored-game-helpers.json`). Never edit vendored payload by
+hand; change the source repo and re-run the script. `SKILL.md` files are
+hand-authored and owned here.
+
+**Syncing with run-game-helpers.** `vendored-game-helpers.json` pins the exact
+source commit the payload was scraped from. CI can't reach the private repo, so
+drift is checked on demand against a local checkout:
+
+```bash
+node scripts/vendor-game-helpers.mjs --check ../run-game-helpers   # what would change?
+node scripts/vendor-game-helpers.mjs        ../run-game-helpers   # re-vendor + re-pin
+```
+
+`--check` compares the pin to the checkout's `HEAD`, lists the payload files
+that changed between them, and exits non-zero on drift (0 when up to date) —
+so it works in a pre-release script. It never writes anything. After a real
+re-vendor, **re-read the file map in each affected skill's `SKILL.md`**: the
+script deliberately doesn't touch `SKILL.md`, so a system that gains or loses a
+file needs that table updated by hand.
+
+Both modes also verify the script's `FEATURE_SYSTEMS` table (which skills carry
+`shared/serverTime.ts` and `references/run-sdk-notes.md`) against what the source
+actually imports, and refuse to run on a mismatch — otherwise a system that
+starts importing the SDK upstream would silently ship without its SDK notes.
 
 ### ai setup
 
@@ -369,7 +401,7 @@ Advanced commands for managing your game are available under the `game` subcomma
 
 ### game create
 
-Creates a new game on RUN.game. This is an alias for `init` under the `game` subcommand.
+Creates a new game on RUN.world. This is an alias for `init` under the `game` subcommand.
 
 ```bash
 rundot game create
@@ -380,9 +412,9 @@ rundot game create
 - `--name`: The name of your game
 - `--description`: Description of your game
 - `--build-path`: Path to your game's distribution/build folder
-- `--uses-preloader`: Whether the game uses the RUN.gameSDK
+- `--uses-preloader`: Whether the game uses the RUN.world SDK
 - `--override`: Should override old game config file if it exists
-- `--env`: Environment to create the game in
+- `--env`: Environment to create the game in (Series-internal)
 
 ### game info
 
@@ -395,7 +427,7 @@ rundot game info
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to fetch info from
+- `--env`: Environment to fetch info from (Series-internal)
 
 **Output includes:**
 
@@ -418,8 +450,8 @@ rundot game configure
 
 - `--game-id`: The game ID
 - `--build-path`: Path to your game's distribution/build folder
-- `--uses-preloader`: Whether the game uses the RUN.gameSDK
-- `--env`: Environment to use
+- `--uses-preloader`: Whether the game uses the RUN.world SDK
+- `--env`: Environment to use (Series-internal)
 
 **What it does:**
 Creates or updates the `game.config.prod.json` file in your current directory.
@@ -439,7 +471,7 @@ rundot game set-name "New Game Name"
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to update
+- `--env`: Environment to update (Series-internal)
 
 ### game set-description
 
@@ -453,7 +485,7 @@ rundot game set-description --description "New description"
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--description`: The new description for your game
-- `--env`: Environment to update
+- `--env`: Environment to update (Series-internal)
 
 ### game list-versions
 
@@ -466,7 +498,7 @@ rundot game list-versions
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to list versions from
+- `--env`: Environment to list versions from (Series-internal)
 
 ### game upload-build
 
@@ -481,8 +513,8 @@ rundot game upload-build
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--build-path`: Path to your game's distribution/build folder
 - `--bump`: Version bump type - `major`, `minor`, or `patch` (default: `minor`)
-- `--uses-preloader`: Whether the game uses the RUN.gameSDK
-- `--env`: Environment to upload to
+- `--uses-preloader`: Whether the game uses the RUN.world SDK
+- `--env`: Environment to upload to (Series-internal)
 
 **Note:** After uploading, you'll need to run `rundot game update-tag` to make the version accessible.
 
@@ -497,7 +529,7 @@ rundot game list-server-configs
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to list configs from
+- `--env`: Environment to list configs from (Series-internal)
 
 ### game upload-server-config
 
@@ -510,7 +542,7 @@ rundot game upload-server-config
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to upload to
+- `--env`: Environment to upload to (Series-internal)
 
 ### game list-runtime-configs
 
@@ -523,11 +555,11 @@ rundot game list-runtime-configs
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to list configs from
+- `--env`: Environment to list configs from (Series-internal)
 
 ### game set-public
 
-Sets your game visible on the explore page in RUN.game.
+Sets your game visible on the explore page in RUN.world.
 
 ```bash
 rundot game set-public
@@ -537,14 +569,14 @@ rundot game set-public
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--version`: Which version to set public (latest by default)
-- `--env`: Environment to update
+- `--env`: Environment to update (Series-internal)
 
 **What it does:**
 Makes your game discoverable in search results and visible on your public profile. The share URL and a scannable QR code are printed in the terminal.
 
 ### game set-private
 
-Hides your game from the explore page in RUN.game.
+Hides your game from the explore page in RUN.world.
 
 ```bash
 rundot game set-private
@@ -553,7 +585,7 @@ rundot game set-private
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to update
+- `--env`: Environment to update (Series-internal)
 
 **Note:** The game will still be accessible via its share link, but won't appear in search results.
 
@@ -569,7 +601,7 @@ rundot game list-tags
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--tag`: Filter by specific tag
-- `--env`: Environment to list tags from
+- `--env`: Environment to list tags from (Series-internal)
 
 ### game update-tag
 
@@ -591,7 +623,7 @@ rundot game update-tag <tag-name>
 - `--runtime-config-id`: Runtime config ID to use
 - `--unset-version`: Unset the version ID
 - `--unset-server-config-id`: Unset the server config ID
-- `--env`: Environment to update
+- `--env`: Environment to update (Series-internal)
 
 ### game delete-tag
 
@@ -608,7 +640,7 @@ rundot game delete-tag <tag-name>
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to delete from
+- `--env`: Environment to delete from (Series-internal)
 
 ### game copy-tag
 
@@ -626,7 +658,7 @@ rundot game copy-tag <source> <target>
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to use
+- `--env`: Environment to use (Series-internal)
 
 ### game list-editors
 
@@ -639,7 +671,7 @@ rundot game list-editors
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to use
+- `--env`: Environment to use (Series-internal)
 
 ### game add-editors
 
@@ -656,7 +688,7 @@ rundot game add-editors <emails>
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to update
+- `--env`: Environment to update (Series-internal)
 
 ### game remove-editors
 
@@ -673,7 +705,7 @@ rundot game remove-editors <emails>
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--env`: Environment to update
+- `--env`: Environment to update (Series-internal)
 
 ### game api-keys
 
@@ -699,7 +731,7 @@ rundot game api-keys revoke --key-id <KEY_ID>
 - `revoke`: Revoke a key immediately.
   - `--key-id` (required), `--yes` to skip confirmation
 
-All subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env`.
+All subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env` (Series-internal).
 
 #### Two key types: `rk_` (deploy) vs `pk_` (playground)
 
@@ -742,7 +774,18 @@ unambiguous prefix match via `api-keys list`), then removes the line. The raw
 secret can't be revoked directly — only hashed secrets are stored. A subsequent
 `npm run dev` falls back to the toolbar Google sign-in.
 
-Both subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env`.
+Both subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env` (Series-internal).
+
+## Unity Ads marketing
+
+Unity is available when enabled. Create separate paused campaigns for iOS and
+Android:
+
+    rundot marketing prepare --name launch-ios --network unity --platforms ios --target-cpi 3.00
+
+Unity requires exactly one square creative and one MP4. Submit creates a paused
+campaign and waits for creative approval before it can be launched. Use marketing
+status to see the provider, platform, campaign ID, and readiness.
 
 ## Generate Commands
 
@@ -757,18 +800,50 @@ rundot generate <kind> [options]
 > **Note:** `generate` and its subcommands are now generally available and appear
 > in `rundot --help`. A few other command groups remain beta-gated — hidden until
 > you set `RUNDOT_BETA_FEATURES=1` (or `true`) in your environment: `marketing`,
-> `socials`, `analytics`, `ugc`, `stats`, `collectibles`, and the `image` utility
+> `socials`, `ugc`, `stats`, `collectibles`, and the `image` utility
 > group (`image depth` / `remove-bg` / `upscale` / `turnaround`). The `image`
 > utilities are also prod-only and require an interactive `rundot login` (they
-> reject `rk_` API-key sessions).
+> reject `rk_` API-key sessions). The `analytics` group is shown to everyone (not
+> gated behind `RUNDOT_BETA_FEATURES`) but is still labeled **(beta)**.
 
 ### Behavior shared by all generate commands
 
 - **Auth required.** Run `rundot login` first. Generation runs against the active
   environment's venus-server; if that environment has no generation endpoint
   configured, switch with `rundot set-env <prod|staging|dev|local>`.
-- **Game ID resolution.** `--game-id` is read from `game.config.prod.json` in the
-  current directory when omitted. If neither is present, the command errors.
+- **Game ID is optional.** `--game-id` is read from `game.config.prod.json` in the
+  current directory when omitted. **Every credit-spending command also works with
+  no game ID at all** — the generation is then billed directly to the
+  authenticated creator's credits instead of to the game. That covers `text`,
+  `image`, `music`, `sfx`, `tts`, `video`, `sprite`, `animate-sprite`,
+  `sprite-character-animate`, `sprite-jobs`, `character-workflows`,
+  `design-voice`, `save-voice`, `list-voices`, `estimate`, the `image` utilities
+  (`depth`, `remove-bg`, `upscale`, `turnaround`), and the 3D commands
+  (`generate-3d`, `remesh-3d`, `rig-3d`, `animate-3d`).
+
+  Two command families stay game-scoped by nature and still require a game ID:
+  `game generate-thumbnail` (it *is* a game's thumbnail) and the `marketing`
+  commands (campaigns belong to a game).
+- **File-key inputs need a game.** Options that take a *file key*
+  (`--image-file-key`, `--model-file-key`, `--reference-file-key`,
+  `--edit-file-key`) resolve through the game-scoped files API, so they are
+  rejected on a gameless call. Pass a direct URL — or, for sprites, an asset id —
+  instead.
+- **Where gameless assets live.** Gameless generations are stored under a
+  per-creator partition rather than a game's, and their background jobs are
+  polled/drained there too. This is transparent in normal use: a gameless
+  `sprite-character-animate` is recoverable with a gameless `sprite-jobs --drain`.
+  List and remove them with [`rundot assets`](#assets) — same `--game-id`
+  resolution, so the command run in a game directory operates on that game.
+- **Generated assets count against your storage quota.** Every generated image,
+  sprite, audio clip, and 3D model is stored in RUN's bucket and counted against
+  your creator storage cap — which is **global across all your games**, not
+  per-game. Over the cap, generation is refused with a `429`. Free space with
+  `rundot assets rm`; see what is using it with `rundot assets list`.
+- **Server compatibility.** Gameless generation requires a venus-server that
+  recognizes creator-direct billing on the target route. **Deploy the Cloud Run
+  changes before distributing a CLI that emits gameless requests** — an older
+  backend rejects them with `Game ID is required for this endpoint`.
 - **Output file.** The result is downloaded to `--out` if provided; otherwise a file
   name is derived from the prompt (e.g. `a-brave-knight.png`). Parent directories are
   created as needed.
@@ -776,6 +851,37 @@ rundot generate <kind> [options]
   asset, recording the generation ID, prompt, model/provider, and other metadata.
 - **`--json`.** Every command supports `--json` for machine-readable output (useful
   for scripting and agents).
+- **Credit-usage reporting.** On success, the image, audio (music/SFX/TTS), video,
+  and sprite commands print the credits charged for the call and your remaining
+  balance — e.g. `Used 800 credits · 47,200 remaining`. The remaining figure is
+  omitted (`Used 800 credits`) when the balance can't be read, and no credit line
+  appears for platform-funded generations. Under `--json`, the same data is on a
+  `credits: { used, remaining }` object. See `rundot credits` for aggregate spend
+  history and `rundot intel balance` for a standalone balance.
+
+### generate estimate
+
+Get an unbilled credit quote before generating. Pass the generation kind followed
+by the options that affect its price:
+
+```bash
+rundot generate estimate image --model gemini-3-pro-image-preview --image-size 4K
+rundot generate estimate music --duration 60
+rundot generate estimate sprite --quantity 4
+rundot generate estimate text --model claude-sonnet-4-6 --messages-file ./messages.json --max-tokens 2000
+```
+
+Fixed RUN-priced operations are labeled `exact at current pricing`. Variable-cost
+operations print the likely estimate, a low–high credit range, the percentage
+below/above the estimate, and why the final charge can vary. Use `--json` for the
+same structured fields (`credits`, `lowCredits`, `highCredits`,
+`lowerPercent`, `upperPercent`, `exact`, and `reason`). The command never runs a
+model or debits credits.
+
+For text generation, the CLI sends `--messages-file`, `--system`, and the output
+token cap to the server. The server applies the same prompt-token estimator and
+model pricing used by real generation preflight; the CLI contains no pricing or
+token-estimation logic.
 
 ### generate image
 
@@ -892,10 +998,10 @@ own `.json` sidecar, and `--json` emits an `assets` array):
 rundot generate sprite --prompt "A cute slime enemy, side view" --variations 3 --out hero-{n}.png
 ```
 
-Generate a seamless/tileable texture:
+Generate a texture-oriented tile candidate:
 
 ```bash
-rundot generate sprite --prompt "Mossy cobblestone ground" --mode texture
+rundot generate sprite --prompt "Mossy cobblestone ground" --tileable
 ```
 
 **Options:**
@@ -904,14 +1010,16 @@ rundot generate sprite --prompt "Mossy cobblestone ground" --mode texture
 - `--pixel`: Generate a pixel-art sprite.
 - `--width`, `--height`: Sprite dimensions in pixels.
 - `--bg`: Background color (e.g. `transparent`).
-- `--smart-crop`: Auto-crop to content bounds. Default `true`; set `false` for exact dimensions.
+- `--smart-crop`: Auto-crop to content bounds. Default `true`; pass `--smart-crop false` or `--no-smart-crop` for exact dimensions.
 - `--pixel-perfect`: Grid-aligned pixel post-processing. Default `true`; set `false` for exact dimensions.
 - `--style`: Art style (e.g. `16-bit SNES`).
 - `--model`: Model to use for generation.
 - `--theme`: Visual theme hint.
 - `--colors`: Comma-separated hex color palette (max 8).
+- `--palette-file`: Reusable comma- or whitespace-separated hex palette file (max 8); mutually exclusive with `--colors`.
 - `--variations`: Number of candidate images per call (1–4). With 2+ variations, `--out` must contain a `{n}` placeholder (1-based index, e.g. `hero-{n}.png`); when `--out` is omitted, `-{n}` is inserted before the extension of the derived name.
-- `--mode`: Generation mode — `assets`, `texture` (seamless/tileable), or `ui`.
+- `--mode`: Generation mode — `assets`, `texture`, or `ui`. Texture mode does not guarantee seamless edges.
+- `--tileable`: Requests texture-oriented output; alias for `--mode texture`. Verify seams after generation.
 - `--resolution`: Output resolution — `1K`, `2K`, or `4K`.
 - `--quality`: Generation quality — `low`, `medium`, or `high`.
 - `--aspect-ratio`: Aspect ratio — `1:1`, `16:9`, or `9:16`.
@@ -944,6 +1052,8 @@ rundot generate animate-sprite --prompt "walk cycle, side view" \
 - `--frames`: Number of animation frames.
 - `--format`: Output format (e.g. `spritesheet`).
 - `--remove-bg`: Background removal — `None`, `Basic`, or `Pro`. Default: `Basic`.
+- `--pixel`: Force pixel-art animation mode. When omitted, SpriteCook infers the mode from the source asset.
+- `--palette-size`: Pixel-animation palette size, such as `16` or `32`. This controls color count; the animation API does not accept a fixed hex palette.
 - `--negative-prompt`: Negative guidance text for the animation.
 - `--matte-color`: Hex color (`#RRGGBB`) alpha is matted against during animation/background removal. Provider default: `#808080`.
 - `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
@@ -1101,8 +1211,9 @@ rundot generate save-voice --generated-voice-id <temp-id> --voice-name "Wizard"
 ### generate text
 
 Run an LLM chat completion from a messages file. Result is written to **stdout**
-(there is no `--out`). A game ID must resolve (flag or `game.config.prod.json`) —
-completions are billed to the game.
+(there is no `--out`). `--game-id` is optional: with a game ID (flag or
+`game.config.prod.json`) the completion is billed to the game; without one the
+completion is billed directly to the authenticated creator's credits.
 
 ```bash
 rundot generate text --model claude-sonnet-4-5 --messages-file ./messages.json
@@ -1115,7 +1226,7 @@ The messages file is a JSON `AiMessage[]` array.
 - `--model` (required): Model identifier (see `generate text-models`).
 - `--messages-file` (required): Path to a JSON file containing an `AiMessage[]` array.
 - `--system`: System prompt — a literal string, or `@path/to/file.txt` to read it from a file.
-- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided). Optional — when neither resolves, the completion bills the authenticated creator directly.
 - `--response-format`: `text` (default), `json_object`, or `json_schema`.
 - `--schema-file`: Path to a JSON Schema file. **Required** with `--response-format json_schema`; rejected otherwise.
 - `--strict-schema`: Enable strict schema adherence (only valid with `--response-format json_schema`).
@@ -1157,7 +1268,7 @@ rundot image turnaround --input <url|file|key> [--horizontal-angle N] [--vertica
 - `--out`: Output path for the result (default: `{input-stem}_turnaround.png`). With `--num-images > 1`, results are written as `{stem}_1.png`, `{stem}_2.png`, … next to that path.
 - `--force`: Overwrite existing output without prompting.
 - `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
-- `--env`: Environment — prod-only.
+- `--env`: Environment — prod-only. (Series-internal)
 
 At least one of `--horizontal-angle` / `--vertical-angle` is required (a
 turnaround with no angle is a no-op). Cost scales with the input resolution
@@ -1181,26 +1292,63 @@ rundot image turnaround --input ./hero.png --horizontal-angle 45 --num-images 4 
 > (`image depth`, `image remove-bg`, `image upscale`) live outside the `generate`
 > group and are not yet documented here.
 
+## Assets
+
+Generated assets (images, sprites, audio, 3D models) are stored in RUN's bucket
+and count against your **creator storage cap**, which is global across all your
+games. `rundot assets` is how you see what is using that space and reclaim it.
+
+Like the generate commands, `--game-id` is optional: omit it (and run outside a
+game directory) to operate on your **gameless** creator assets; pass it — or run
+inside a directory whose `game.config.*.json` names a game — to operate on that
+game's.
+
+### assets list
+
+```bash
+rundot assets list                        # your gameless assets, all services
+rundot assets list --service imagegen     # one service
+rundot assets list --game-id my-game      # a game's assets
+rundot assets list --status removed       # already-removed entries
+```
+
+Sweeps all four generation services by default and prints each asset's id, size,
+prompt, and creation time, followed by the total counted against your quota.
+Use the printed id with `assets rm`.
+
+### assets rm
+
+```bash
+rundot assets rm <generation-id> --service imagegen
+rundot assets rm <generation-id> --service spritegen --game-id my-game
+```
+
+`--service` is required: each service partitions its generations separately, so
+the id alone is ambiguous. Removal quarantines the stored object and **returns
+its bytes to your storage quota**.
+
 ## Intel Commands
 
 Competitive market intelligence for creators — rankings, modeled downloads,
 Steam concurrency, ad-creative galleries, and full competitor dossiers.
 
 **Access & pricing.** Intel is gated to paying creators (creator tier or
-higher) and switchable via a server-side kill-switch. It's priced in RUN.game
+higher) and switchable via a server-side kill-switch. It's priced in RUN.world
 credits (1,000 credits = $1):
 
 | Action | Cost |
 |---|---|
 | `search`, `snapshot`, `whats-hot`, `balance` | Free (rate-limited) |
-| `dossier` download | A free weekly allowance per tier (creator 1 … max 5), then **1,000 credits** each |
+| `dossier` download of an existing dossier | A free weekly allowance per tier (creator 1 … max 5), then **1,000 credits** each |
 | `dossier --generate` (build a dossier that doesn't exist yet) | **10,000 credits**, charged only on success |
 | Weekly "What's Hot" email | Free with an active subscription |
 
 Every command is **agent-operable**: each supports `--json` for structured
-output, and all spending is flag-driven — no command ever charges credits
-without an explicit `--confirm-spend` or `--generate` flag. Without the flag, a
-paid action prints the structured cost (and your balance) and exits non-zero.
+output, and non-interactive spending is flag-driven — no command ever charges
+credits without an explicit `--confirm-spend` or `--generate` flag. In an
+interactive terminal, `--generate` also asks for confirmation; pass `--yes` to
+skip it. Without the flag, a paid action prints the structured cost (and your
+balance) and exits non-zero.
 
 ### intel search
 
@@ -1226,6 +1374,13 @@ counts.
 ### intel dossier
 
 ```bash
+# See every dossier that already exists and whether you own it:
+rundot intel dossier list
+rundot intel dossier list --limit 10 --offset 10 --json
+
+# Preview contents and pricing without charging:
+rundot intel dossier "Slay the Spire" --preview
+
 # Free within your weekly allowance:
 rundot intel dossier "Slay the Spire"
 
@@ -1234,13 +1389,17 @@ rundot intel dossier "Slay the Spire" --confirm-spend
 
 # If no dossier exists yet, authorize generating one (10,000 credits):
 rundot intel dossier "Slay the Spire" --generate
+rundot intel dossier "Slay the Spire" --generate --yes  # skip the interactive prompt
 ```
 
 The full report: snapshot + qualitative teardown (signed, time-limited document
 and screenshot URLs) + the UA creative gallery. Without `--confirm-spend` an
 overage prints the cost and exits non-zero; without `--generate` a missing
-dossier prints the generation cost and exits non-zero. Generation is charged
-only once the dossier is downloadable.
+dossier prints the generation cost and exits non-zero. The free weekly allowance
+applies only to downloading a dossier that already exists; it cannot fund
+generation. Generation is charged only once the dossier is downloadable. A
+successful human-readable download prints a receipt showing either the free
+coupon consumed and reset date or the credits charged and balance afterward.
 
 ### intel whats-hot
 
@@ -1256,7 +1415,10 @@ The global "What's Hot" market digest (aggregate movers). Free.
 rundot intel balance
 ```
 
-Your credit balance and free dossiers remaining this week.
+Your credit balance, free allowance total/reset, existing dossier count, and any
+pending generations. Pending generations show the credits committed to them and
+are charged when each completes. The free allowance is explicitly for existing
+dossier downloads only — it cannot be used to generate one.
 
 ### intel subscribe
 
@@ -1298,7 +1460,7 @@ rundot socials profile set \
   --tone "hyped but humble" \
   --hashtags "indiegame,h5games" \
   --cta "Play now,Drop a comment" \
-  --footer "Made with RUN.game"
+  --footer "Made with RUN.world"
 ```
 
 | Option | Purpose |
@@ -1407,13 +1569,18 @@ rundot storage usage <profile-id> [--scope app|owner] [--save <file>]
 ### storage export
 
 ```bash
-rundot storage export <profile-id> [--game-id <id>] [--scope app|owner] [--as-of <iso>] [--save <file>]
+rundot storage export (<profile-id> | --username <name>) [--game-id <id>] [--scope app|owner] [--as-of <iso>] [--save <file>]
 ```
 
 Grabs a player's storage bucket and writes a portable snapshot JSON
 (`{ env, profileId, gameId, scope, asOf, capturedAt, data }`). With `--save`, the
 snapshot is written to a file and a summary is printed; without it, the snapshot
 JSON is printed to stdout.
+
+* Identify the player by `<profile-id>` **or** `--username <name>` (not both).
+  `--username` resolves the name to its profile ID for you (same lookup as
+  `rundot profile search`); it errors, listing candidates, when the name has no
+  exact match or is ambiguous, so pass the ID directly in that case.
 
 * `--scope` is `app` (default) or `owner`. **`owner` snapshots are
   export/inspect-only and cannot be imported** — the owner bucket is shared
@@ -1462,12 +1629,12 @@ without writing a snapshot file (same window and recovery-window behavior as
 ### Example 1: Creating and Deploying a New Game
 
 ```bash
-# Step 1: Login to RUN.game
+# Step 1: Login to RUN.world
 rundot login
 
 # Step 2: Initialize your game
 rundot init
-# Prompts for: Game Name, Description, Build Path, Uses RUN.gameSDK
+# Prompts for: Game Name, Description, Build Path, Uses RUN.world SDK
 
 # Step 3: Deploy your game
 rundot deploy
@@ -1549,6 +1716,25 @@ rundot game add-editors "dev1@example.com dev2@example.com"
 # Remove an editor
 rundot game remove-editors "former-teammate@example.com"
 ```
+
+## Kinetix Pack Build and Catalog (Beta)
+
+The current beta builds, signs, stores, and catalogs data-only Kinetix packs;
+native iOS mounting is a separate follow-up. Install
+`@series-inc/rundot-kinetix` in the game project and use Git plus Node.js 22+:
+
+```bash
+rundot pack preflight --commit HEAD --profile deterministic-f64
+rundot login --api-key-stdin < key.txt
+rundot pack submit --version <versionId> --commit HEAD --profile deterministic-f64
+rundot pack status --version <versionId>
+```
+
+Submit uploads a private temporary ZIP from `git archive` for the resolved full
+commit SHA. Worktree modifications and untracked files are never included. Add
+`--json` to any command for one compact stdout object; progress and errors remain
+on stderr. Status exposes `queued`, `running`, `succeeded`, or `failed`, attempt
+count, stable failure code, and successful artifact/runtime identity fields.
 
 ## Troubleshooting
 
