@@ -9,6 +9,7 @@ Looking for the SDK API docs? They ship inside the `@series-inc/rundot-game-sdk`
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
+- [Progress output](#progress-output)
 - [Commands](#commands)
   - [login](#login)
   - [init](#init)
@@ -132,6 +133,17 @@ The RUN.world CLI stores configuration data in the following locations:
 - **Game configuration**: `game.config.prod.json` in your project directory
 - **Project-local config & marketing**: the visible `rundot/` folder in your project directory (server config, `marketing/`, `cli_hooks.json`, `simulation/`). The legacy hidden `.rundot/` folder is still read; run `rundot migrate-config` to rename it to `rundot/`.
 
+## Progress output
+
+Long-running commands show an animated status with phase or percentage updates
+when the terminal supports ANSI rendering. In redirected output, CI, agent
+shells, or terminals such as `TERM=dumb`, `rundot` prints a plain elapsed-time
+heartbeat every 10 seconds instead.
+
+Progress is written to stderr in the plain fallback. Command results remain on
+stdout, so redirects and machine-readable output such as `--json` can be
+consumed without progress lines mixed into the payload.
+
 ## Commands
 
 > **Note:** The `--env` flag is internal to Series and is hidden from external creators' `--help`.
@@ -157,7 +169,7 @@ rundot login
 2. Saves your session locally under `~/.rundot/`
 3. Automatically refreshes your session when it expires
 
-**Note:** You need to login before using commands like `init`, `deploy`, and `list-games`.
+**Note:** You need to login before using commands like `init`, `deploy`, `import`, and `list-games`.
 
 ### init
 
@@ -189,6 +201,31 @@ If you don't provide options, the CLI will prompt you for:
 - Game Description
 - Path to game build folder (default: `./dist`)
 - Whether your game uses the RUN.world SDK
+
+### import
+
+Registers an existing project directory with RUN. For recognized Vite/npm web projects, optionally wires the RUN game SDK (dependency, Vite plugins, entry init) after explicit consent. Other project shapes register only and print guidance. Does not copy project files or invent import counts.
+
+```bash
+rundot import ./my-game --yes
+rundot import ./my-game --name "Glacier Run" --yes
+```
+
+**Options:**
+
+- `dir` (argument): Path to the existing project directory
+- `--name`: Game name (defaults to `package.json` name when present)
+- `--description`: Game description
+- `--yes` / `-y`: Skip the confirmation prompt (required non-interactively)
+- `--env`: Environment to create the game in (Series-internal)
+
+**What it does:**
+
+1. Detects whether the target is a constrained Vite/npm web project that can be auto-wired
+2. Asks for consent, then creates a durable `rundot/.import-journal.json` with an idempotency key
+3. Creates the remote game (retries reuse the same key; no duplicate games)
+4. Applies planned SDK wiring when supported, then writes `game.config.<env>.json` atomically
+5. Clears the journal after success
 
 ### deploy
 
@@ -783,9 +820,10 @@ Android:
 
     rundot marketing prepare --name launch-ios --network unity --platforms ios --target-cpi 3.00
 
-Unity requires exactly one square creative and one MP4. Submit creates a paused
-campaign and waits for creative approval before it can be launched. Use marketing
-status to see the provider, platform, campaign ID, and readiness.
+Unity requires exactly one square creative and one MP4. `marketing generate` creates
+the MP4 from the prepared video brief after its `[[AGENT: ...]]` direction is filled.
+Submit creates a paused campaign and waits for creative approval before it can be
+launched. Use marketing status to see the provider, platform, campaign ID, and readiness.
 
 ## Generate Commands
 
@@ -800,7 +838,7 @@ rundot generate <kind> [options]
 > **Note:** `generate` and its subcommands are now generally available and appear
 > in `rundot --help`. A few other command groups remain beta-gated — hidden until
 > you set `RUNDOT_BETA_FEATURES=1` (or `true`) in your environment: `marketing`,
-> `socials`, `ugc`, `stats`, `collectibles`, and the `image` utility
+> `ugc`, `stats`, `collectibles`, and the `image` utility
 > group (`image depth` / `remove-bg` / `upscale` / `turnaround`). The `image`
 > utilities are also prod-only and require an interactive `rundot login` (they
 > reject `rk_` API-key sessions). The `analytics` group is shown to everyone (not
@@ -959,7 +997,7 @@ rundot generate video --prompt "A spaceship flying through an asteroid field" \
 **Options:**
 
 - `--prompt` (required): Text prompt for video generation.
-- `--provider`: `seedance-2.0`, `seedance-2.0-fast`, or `kling-3.0-standard`. Default: `seedance-2.0`.
+- `--provider`: `seedance-2.0`, `seedance-2.0-fast`, `seedance-2.0-v2-fast` (enterprise/v2 fast tier), or `kling-3.0-standard`. Default: `seedance-2.0`.
 - `--mode`: `text-to-video`, `image-to-video`, or `reference-to-video`. Default: `text-to-video`.
 - `--duration`: Duration in seconds. Seedance: 4–15. Kling: 3–15.
 - `--seed`: Reproducibility seed.
@@ -1287,6 +1325,46 @@ rundot image turnaround --input ./bg.png --horizontal-angle 90 --out ./bg_right.
 rundot image turnaround --input ./hero.png --horizontal-angle 45 --num-images 4 --out ./hero_angle.png --game-id my-game
 ```
 
+### `image edit` _(beta)_
+
+Apply a text-instructed edit to one or more source images via Seedream 5.0 Pro
+Edit (`bytedance/seedream/v5/pro/edit`). Unlike `generate`, this model *requires*
+input images — it cannot produce an image from a bare prompt. Beta-gated (set
+`RUNDOT_BETA_FEATURES=1`); prod-only; requires an interactive `rundot login`
+session. The game id is optional — omit it to bill the authenticated creator.
+
+**Synopsis:**
+
+```bash
+rundot image edit --prompt <text> --input <url|file|key> [--input ...] [--image-size 1K|2K] [--out path] [--force] [--game-id id]
+```
+
+**Options:**
+
+- `--prompt` (required): Instruction describing the edit to apply.
+- `--input` (required, repeatable): HTTPS URL, app file key, or local file path of an input image. Up to 10; more than 10 is rejected. App file keys resolve through the game's files API, so they require `--game-id`; a gameless call rejects them with a 400.
+- `--image-size`: Output resolution — `1K` (default) or `2K`. `2K` costs double per image.
+- `--out`: Output path for the result (default: `{first-input-stem}_edit.png`).
+- `--force`: Overwrite existing output without prompting.
+- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided; omit for a creator-billed call).
+- `--env`: Environment — prod-only. (Series-internal)
+
+Each extra input image beyond the first adds a small surcharge, so pass only the
+references the edit actually needs.
+
+**Example** — restyle a single sprite:
+
+```bash
+rundot image edit --prompt "make it winter, add falling snow" --input ./bg.png --out ./bg_winter.png --game-id my-game
+```
+
+**Example** — compose using several references at 2K:
+
+```bash
+rundot image edit --prompt "put the character from image 1 into the scene from image 2" \
+  --input ./hero.png --input ./scene.png --image-size 2K --out ./composed.png
+```
+
 > **Related generation commands.** 3D-asset commands (`game generate-3d`,
 > `game remesh-3d`, `game rig-3d`, `game animate-3d`) and image-utility commands
 > (`image depth`, `image remove-bg`, `image upscale`) live outside the `generate`
@@ -1439,7 +1517,7 @@ game from the local game config or accept `--game-id`.
 | `rundot socials status` | Show the posting checklist (`--json` for machine output) |
 | `rundot socials next` | Show the next unposted platform to act on (`--json`) |
 | `rundot socials open` | Print composer URL + copy text for a platform (`--json`) |
-| `rundot socials promo` | Generate a platform-sized promo image |
+| `rundot socials promo` | Generate game-grounded platform promo image(s) and save every provider result |
 | `rundot socials mark-posted` | Record a published post URL for a platform |
 | `rundot socials verify` | Check which steps are **finished** |
 | `rundot socials profile set` | Configure your creator social profile (Discord webhook, tone, hashtags, footer, CTAs) |
