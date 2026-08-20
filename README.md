@@ -787,17 +787,25 @@ on-ramp.
 
 ### playground
 
-The headless dev-server on-ramp. `grant-access` mints a short-lived **playground
-key** (a `pk_…` key, label `headless-dev`, 14-day expiry) for the current game and
-writes it to `.env.local` as `RUNDOT_PLAYGROUND_KEY=<secret>`. The SDK playground
-plugin reads that key from `.env.local` so `npm run dev` signs in headlessly with
-no `vite.config` editing. The key never leaves your dev server. (It must run
-against the prod environment — playground sign-in is prod-federated.)
+The headless dev-server on-ramp. `grant-access` mints a **playground key** (a
+`pk_…` key, label `headless-dev`, **365-day CLI default**) for the current game
+and writes it to `.env.local` as `RUNDOT_PLAYGROUND_KEY=<secret>`. The SDK
+playground plugin reads that key from `.env.local` so `npm run dev` signs in
+headlessly with no `vite.config` editing. The key never leaves your dev server.
+(It must run against the prod environment — playground sign-in is prod-federated.)
 
 ```bash
-rundot playground grant-access     # mint + write .env.local (0600, git-ignored)
-rundot playground revoke-access    # revoke server-side + strip the line
+rundot playground grant-access                        # mint (365-day default) + write .env.local
+rundot playground grant-access --expires-in-days 14   # shorter TTL (1–365)
+rundot playground revoke-access                       # revoke server-side + strip the line
 ```
+
+Options:
+
+- `--expires-in-days`: Days until the key expires (1–365, **default 365**). Same
+  range and default as `game api-keys create` — so CI secrets and local-dev keys
+  both last a year without a re-mint unless you pass a shorter value.
+- `--force`: Allow writing into a git-tracked `.env.local` (otherwise refused).
 
 This writes a **durable secret to disk** — it is for deliberate headless use. The
 default interactive Google sign-in in the dev toolbar needs no key at all; prefer
@@ -812,6 +820,14 @@ secret can't be revoked directly — only hashed secrets are stored. A subsequen
 `npm run dev` falls back to the toolbar Google sign-in.
 
 Both subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env` (Series-internal).
+
+### Campaign app deep links
+
+Meta iOS and Android app legs use the game id and selected tag to build a
+server-side `run.game://app` deferred target. Meta receives that value in its
+deep-link field and receives the HTTPS app-store URL separately. Do not add a
+deep-link string to `campaign.json`. Unity and Google use separate provider
+paths. See [the deferred deep-link specification](../docs/marketing-deep-links.md).
 
 ## Unity Ads marketing
 
@@ -1799,12 +1815,13 @@ rundot game remove-editors "former-teammate@example.com"
 
 The current beta builds, signs, stores, and catalogs data-only Kinetix packs;
 native iOS mounting is a separate follow-up. Install
-`@series-inc/rundot-kinetix` in the game project and use Git plus Node.js 22+:
+`@series-inc/rundot-syncplay` (which carries the deterministic core) in the game
+project and use Git plus Node.js 22+:
 
 ```bash
-rundot pack preflight --commit HEAD --profile deterministic-f64
+rundot pack preflight --commit HEAD
 rundot login --api-key-stdin < key.txt
-rundot pack submit --version <versionId> --commit HEAD --profile deterministic-f64
+rundot pack submit --version <versionId> --commit HEAD
 rundot pack status --version <versionId>
 ```
 
