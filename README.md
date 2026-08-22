@@ -123,6 +123,8 @@ The CLI uses a `game.config.prod.json` file to store your game's configuration:
 }
 ```
 
+> `usesPreloader` is deprecated. `false` (the default) lets the host reveal your game as soon as it is ready.
+
 This file is created automatically when you run `rundot init` and makes future deployments easier by storing your game ID and build path.
 
 ### Data Storage Locations
@@ -184,7 +186,7 @@ rundot init
 - `--name`: The name of your game
 - `--description`: Description of your game
 - `--build-path`: Path to your game's distribution/build folder
-- `--uses-preloader`: Whether the game uses the RUN.world SDK
+- `--uses-preloader`: **[Deprecated]** Whether the host keeps its loading screen up until your game calls `hideLoadScreen()`
 - `--override`: Should override old game config file if it exists
 - `--env`: Environment to create the game in (Series-internal)
 
@@ -200,7 +202,6 @@ If you don't provide options, the CLI will prompt you for:
 - Game Name
 - Game Description
 - Path to game build folder (default: `./dist`)
-- Whether your game uses the RUN.world SDK
 
 ### import
 
@@ -240,7 +241,7 @@ rundot deploy
 - `--game-id`: The game ID to deploy (reads from `game.config.prod.json` if not provided)
 - `--build-path`: Path to your game's distribution/build folder
 - `--bump`: Version bump type - `major`, `minor`, or `patch` (default: `minor`)
-- `--uses-preloader`: Whether the game uses the RUN.world SDK
+- `--uses-preloader`: **[Deprecated]** Whether the host keeps its loading screen up until your game calls `hideLoadScreen()`
 - `--public`: Make this version visible on the explore page
 - `--env`: Environment to deploy to (Series-internal)
 
@@ -449,7 +450,7 @@ rundot game create
 - `--name`: The name of your game
 - `--description`: Description of your game
 - `--build-path`: Path to your game's distribution/build folder
-- `--uses-preloader`: Whether the game uses the RUN.world SDK
+- `--uses-preloader`: **[Deprecated]** Whether the host keeps its loading screen up until your game calls `hideLoadScreen()`
 - `--override`: Should override old game config file if it exists
 - `--env`: Environment to create the game in (Series-internal)
 
@@ -487,11 +488,11 @@ rundot game configure
 
 - `--game-id`: The game ID
 - `--build-path`: Path to your game's distribution/build folder
-- `--uses-preloader`: Whether the game uses the RUN.world SDK
+- `--uses-preloader`: **[Deprecated]** Whether the host keeps its loading screen up until your game calls `hideLoadScreen()`
 - `--env`: Environment to use (Series-internal)
 
 **What it does:**
-Creates or updates the `game.config.prod.json` file in your current directory.
+Creates or updates the `game.config.prod.json` file in your current directory. If you don't provide `--uses-preloader`, it prompts: **[Deprecated]** whether the host keeps its loading screen up until your game calls `hideLoadScreen()`.
 
 ### game set-name
 
@@ -550,7 +551,7 @@ rundot game upload-build
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--build-path`: Path to your game's distribution/build folder
 - `--bump`: Version bump type - `major`, `minor`, or `patch` (default: `minor`)
-- `--uses-preloader`: Whether the game uses the RUN.world SDK
+- `--uses-preloader`: **[Deprecated]** Whether the host keeps its loading screen up until your game calls `hideLoadScreen()`
 - `--env`: Environment to upload to (Series-internal)
 
 **Note:** After uploading, you'll need to run `rundot game update-tag` to make the version accessible.
@@ -821,6 +822,22 @@ secret can't be revoked directly — only hashed secrets are stored. A subsequen
 
 Both subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env` (Series-internal).
 
+Marketing commands use the nearest project `rundot/` folder, or the legacy
+`.rundot/` folder. You can run them from the repository root or from a folder
+inside that project tree. If neither folder exists, `marketing prepare` creates
+`rundot/marketing/` at the nearest Git root. Outside a Git repository, it uses
+the current directory. It does not create a second campaign tree below an
+existing `rundot/` folder.
+
+### Reading campaign revenue
+
+`rundot marketing stats --name <campaign>` reports game revenue for the
+promoted game. This amount matches creator-dashboard revenue before the creator
+share. It includes paid Buck spend in that game, less refunds, and finalized
+game ad revenue. It excludes wallet purchases until the value is spent in the
+game. Provider conversion value is a diagnostic. It is not game revenue. Ad
+revenue can lag through the last finalized UTC day shown by the command.
+
 ### Campaign app deep links
 
 Meta iOS and Android app legs use the game id and selected tag to build a
@@ -908,10 +925,10 @@ rundot generate <kind> [options]
 - **Credit-usage reporting.** On success, the image, audio (music/SFX/TTS), video,
   and sprite commands print the credits charged for the call and your remaining
   balance — e.g. `Used 800 credits · 47,200 remaining`. The remaining figure is
-  omitted (`Used 800 credits`) when the balance can't be read, and no credit line
-  appears for platform-funded generations. Under `--json`, the same data is on a
-  `credits: { used, remaining }` object. See `rundot credits` for aggregate spend
-  history and `rundot intel balance` for a standalone balance.
+  omitted (`Used 800 credits`) when the balance can't be read. Under `--json`,
+  the same data is on a `credits: { used, remaining }` object. See
+  `rundot credits` for aggregate spend history and `rundot intel balance` for a
+  standalone balance.
 
 ### generate estimate
 
@@ -1874,6 +1891,12 @@ count, stable failure code, and successful artifact/runtime identity fields.
    - Or simply open a new terminal window
    - To verify: run `echo $PATH` and check if `~/.local/bin` is listed
    - If you used a custom install directory, make sure it's in your PATH
+
+9. **Marketing access and billing errors**
+   - Owners and editors can prepare, generate, preview, and submit a campaign.
+   - Only owners can pause, resume, cancel, extend, or change a campaign budget.
+   - A specific `403` message is a server policy error. Follow that message.
+   - A bare access error means the login has no owner or editor role for the game.
 
 ### Getting Help
 
