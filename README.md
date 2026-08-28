@@ -96,7 +96,7 @@ Before using the CLI, you need to authenticate with your RUN.world account:
 rundot login
 ```
 
-This will open a browser window for you to sign in with your RUN.world credentials. Your session will be saved locally in `~/.rundot/` (or `%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed.
+This will open a browser window for you to sign in with your RUN.world credentials. The CLI saves your session locally in `~/.rundot/` (or `%APPDATA%\.rundot\` on Windows) and automatically refreshes its short-lived authentication token when needed.
 
 You can also authenticate using an API key or a refresh token as alternatives to browser-based authentication. To create, list, regenerate, or revoke per-game API keys, see [`game api-keys`](#game-api-keys).
 
@@ -107,9 +107,9 @@ You can also authenticate using an API key or a refresh token as alternatives to
 - `--refresh-token`: **Discouraged.** Passes a long-lived refresh token on the command line (same shell-history leak).
 - `--env`: Specify the environment to login to (Series-internal)
 
-**Credential storage:** Your session is saved locally under `~/.rundot/` (or
-`%APPDATA%\.rundot\` on Windows) and automatically refreshed when needed. The CLI
-never stores your password directly.
+**Credential storage:** The CLI saves your session locally under `~/.rundot/` (or
+`%APPDATA%\.rundot\` on Windows). It automatically refreshes its short-lived
+authentication token when needed. The CLI never stores your password directly.
 
 ### Game Configuration
 
@@ -142,9 +142,12 @@ when the terminal supports ANSI rendering. In redirected output, CI, agent
 shells, or terminals such as `TERM=dumb`, `rundot` prints a plain elapsed-time
 heartbeat every 10 seconds instead.
 
-Progress is written to stderr in the plain fallback. Command results remain on
-stdout, so redirects and machine-readable output such as `--json` can be
-consumed without progress lines mixed into the payload.
+Progress is written to stderr in the plain fallback. Pre-command hook output
+(for example the SDK version line from `rundot/cli_hooks.json`) is also a
+notice on stderr. When stdout is redirected, the update-available notice goes
+to stderr as a single line. Command results remain on stdout, so redirects and
+machine-readable output such as `--json` and `marketing --format csv` can be
+consumed without notices mixed into the payload.
 
 ## Commands
 
@@ -169,7 +172,7 @@ rundot login
 
 1. Authenticates via browser, API key (stdin or flag), or refresh token
 2. Saves your session locally under `~/.rundot/`
-3. Automatically refreshes your session when it expires
+3. Automatically refreshes your short-lived authentication token when needed
 
 **Note:** You need to login before using commands like `init`, `deploy`, `import`, and `list-games`.
 
@@ -243,6 +246,9 @@ rundot deploy
 - `--bump`: Version bump type - `major`, `minor`, or `patch` (default: `minor`)
 - `--uses-preloader`: **[Deprecated]** Whether the host keeps its loading screen up until your game calls `hideLoadScreen()`
 - `--public`: Make this version visible on the explore page
+- `--changelog`: Release notes for this version (markdown), shown on the game's About tab
+- `--changelog-file`: Read the release notes from a file instead of `--changelog`. Mutually exclusive with it. For headless callers that shouldn't put creator-authored prose on a command line
+- `--json`: Print the result as a single JSON line instead of the human summary (see below)
 - `--env`: Environment to deploy to (Series-internal)
 
 **Version Bumping:**
@@ -260,6 +266,27 @@ rundot deploy
 5. Optionally sets the version as public (visible in explore page)
 6. Returns the share URL for both public and unlisted access, with a scannable QR code printed in the terminal
 
+**Machine-readable output (`--json`):**
+
+With `--json`, the human summary (version/share-URL labels, QR code, next-step
+hints) is replaced by a single JSON line — always the last JSON object the
+command prints, so a caller can scan stdout backwards for it without depending
+on the ordering of other output.
+
+```json
+{"success":true,"gameId":"abc123","version":"1.0.1","shareUrl":"https://run.world/g/xyz","visibility":"private"}
+```
+
+`visibility` is the tag the deploy actually wrote: `private` for a default
+unlisted deploy, `review` for `--public` (the `public` tag is written by the
+review process, not by deploy).
+
+On failure the command prints a JSON error line and still exits 1:
+
+```json
+{"success":false,"error":"GameToLargeException: Game file is too large"}
+```
+
 **Example:**
 
 ```bash
@@ -271,6 +298,11 @@ rundot deploy --bump patch
 
 # Deploy and make public immediately
 rundot deploy --public
+
+# Headless / CI deploy with machine-readable output
+RUNDOT_SKIP_UPDATE_CHECK=1 rundot deploy \
+  --game-id abc123 --build-path ./dist \
+  --bump patch --json --changelog-file ./notes.md
 ```
 
 ### list-games
@@ -321,6 +353,13 @@ rundot update
 - The update process is automatic and seamless
 
 **Note:** The CLI automatically checks for updates when you run any command and will display a notification if a new version is available.
+
+**Skipping the automatic check:** set `RUNDOT_SKIP_UPDATE_CHECK=1` (or `true`)
+to suppress the passive check entirely — no GitHub request, no notification.
+Intended for headless callers: the check is unauthenticated (GitHub allows 60
+requests/hour per IP), so it rate-limits on shared CI or container egress IPs,
+and nothing automated can act on the notice anyway. The explicit `rundot
+update` command is unaffected.
 
 ## Skills Commands
 
@@ -882,24 +921,31 @@ rundot generate <kind> [options]
 - **Auth required.** Run `rundot login` first. Generation runs against the active
   environment's venus-server; if that environment has no generation endpoint
   configured, switch with `rundot set-env <prod|staging|dev|local>`.
-- **Game ID is optional.** `--game-id` is read from `game.config.prod.json` in the
-  current directory when omitted. **Every credit-spending command also works with
-  no game ID at all** — the generation is then billed directly to the
-  authenticated creator's credits instead of to the game. That covers `text`,
-  `image`, `music`, `sfx`, `tts`, `video`, `sprite`, `animate-sprite`,
-  `sprite-character-animate`, `sprite-jobs`, `character-workflows`,
-  `design-voice`, `save-voice`, `list-voices`, `estimate`, the `image` utilities
-  (`depth`, `remove-bg`, `upscale`, `turnaround`), and the 3D commands
-  (`generate-3d`, `remesh-3d`, `rig-3d`, `animate-3d`).
+- **Game ID is optional.** When omitted, `--game-id` is read from
+  `game.config.<command-env>.json` in the current directory. For `generate`,
+  `marketing`, and `socials` that env is the active env (`rundot set-env`).
+  For `game generate-thumbnail` it is `--env` (prod only). When that env is
+  prod, the file is `game.config.prod.json`. A config that names a `gameId`
+  is enough — deploy-only fields such as `relativePathToDistFolder` are not
+  required. **Credit-spending commands also work with no game ID at all** —
+  the generation is then billed to the authenticated creator. That covers
+  `text`, `image`, `music`, `sfx`, `tts`, `video`, `sprite`,
+  `animate-sprite`, `sprite-character-animate`, `sprite-jobs`,
+  `character-workflows`, `design-voice`, `save-voice`, `list-voices`,
+  `estimate`, the `image` utilities (`depth`, `remove-bg`, `upscale`,
+  `turnaround`, `edit`), and the 3D commands (`generate-3d`, `remesh-3d`,
+  `rig-3d`, `animate-3d`).
 
-  Two command families stay game-scoped by nature and still require a game ID:
-  `game generate-thumbnail` (it *is* a game's thumbnail) and the `marketing`
-  commands (campaigns belong to a game).
+  Two command families stay game-scoped by nature: `game generate-thumbnail`
+  (it *is* a game's thumbnail) and the `marketing` / `socials` commands
+  (campaigns and launch packets belong to a game). In a game directory they
+  still read the config `gameId`. Pass `--game-id` only to override, or when
+  you are not in a game directory.
 - **File-key inputs need a game.** Options that take a *file key*
   (`--image-file-key`, `--model-file-key`, `--reference-file-key`,
   `--edit-file-key`) resolve through the game-scoped files API, so they are
   rejected on a gameless call. Pass a direct URL — or, for sprites, an asset id —
-  instead.
+  instead. In a game directory the config supplies that game; pass `--game-id` only outside a game directory.
 - **Where gameless assets live.** Gameless generations are stored under a
   per-creator partition rather than a game's, and their background jobs are
   polled/drained there too. This is transparent in normal use: a gameless
@@ -1735,6 +1781,58 @@ Views a player's current storage. `--as-of <iso>` views a past version via PITR
 without writing a snapshot file (same window and recovery-window behavior as
 `storage export --as-of`).
 
+## Files Commands
+
+Operator commands over player file storage (binaries — images, videos, voices).
+All commands accept `--game-id <id>` (or resolve it from `game.config.*.json`).
+
+### files list
+
+```bash
+rundot files list <profile-id> [--limit <n>] [--cursor <cursor>] [--prefix <prefix>] [--json] [--game-id <id>]
+```
+
+List a player's files. Paginates with `--limit`/`--cursor` (the output prints a
+`nextCursor:` line when more pages exist — pass it back as `--cursor` for the
+next page); `--prefix` narrows to a key prefix; `--json` emits machine-readable
+output.
+
+### files get
+
+```bash
+rundot files get <profile-id> <key> [--json] [--game-id <id>]
+```
+
+Show metadata for one file. `--json` emits machine-readable output.
+
+### files usage
+
+```bash
+rundot files usage [profile-id] [--json] [--game-id <id>]
+```
+
+Show file storage usage, app-wide or for one player. `--json` emits
+machine-readable output.
+
+### files upload
+
+```bash
+rundot files upload <file> [--profile-id <id>] [--key <key>] [--visibility <private|public>] [--game-id <id>]
+```
+
+Upload a file. With `--profile-id`, writes into that player's file space
+(operator restore, audit-logged server-side); without it, writes to your own
+developer file space.
+
+### files delete / files clear
+
+```bash
+rundot files delete <profile-id> <key> [--yes] [--game-id <id>]
+rundot files clear <profile-id> [--yes] [--game-id <id>]
+```
+
+Delete one file, or every file a player has (both require `--yes`).
+
 ## Usage Examples
 
 ### Example 1: Creating and Deploying a New Game
@@ -1852,9 +1950,9 @@ count, stable failure code, and successful artifact/runtime identity fields.
 
 ### Common Issues
 
-1. **"Session expired" or authentication errors**
-   - Run `rundot login` to authenticate
-   - Your session is automatically refreshed, but if you encounter issues, re-login
+1. **Authentication token refresh or authentication errors**
+   - `Refreshing authentication token...` is normal status output. `rundot` refreshes its short-lived authentication token automatically
+   - Run `rundot login` if the refresh fails or authentication errors continue
 
 2. **"Failed to upload file" error**
    - Check your internet connection
