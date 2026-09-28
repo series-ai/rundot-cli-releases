@@ -118,12 +118,19 @@ The CLI uses a `game.config.prod.json` file to store your game's configuration:
 ```json
 {
   "gameId": "your-game-id",
-  "relativePathToBuildFolder": "./dist",
-  "usesPreloader": false
+  "relativePathToDistFolder": "./dist",
+  "usesPreloader": false,
+  "orientation": "landscape",
+  "fullscreenEnabled": true
 }
 ```
 
 > `usesPreloader` is deprecated. `false` (the default) lets the host reveal your game as soon as it is ready.
+
+`fullscreenEnabled` lets the deployed game version use the host fullscreen
+System API. The default value is `true`. Set it to `false` to opt out. A change
+takes effect with the next deployed version. An older CLI does not send this
+field, so the server applies the default to versions it uploads.
 
 This file is created automatically when you run `rundot init` and makes future deployments easier by storing your game ID and build path.
 
@@ -361,6 +368,13 @@ requests/hour per IP), so it rate-limits on shared CI or container egress IPs,
 and nothing automated can act on the notice anyway. The explicit `rundot
 update` command is unaffected.
 
+**Declaring the calling surface:** set `RUNDOT_CHANNEL=studio` when the CLI runs
+on someone's behalf rather than from their own terminal — Studio invoking it in a
+build container, for instance. It sets both the publish channel
+(`x-rundot-channel`) and the spend attribution (`x-consumer`, which tags
+`credit_event`), so the two cannot drift. Only `studio` is recognised; anything
+else, including unset, is `cli`.
+
 ## Skills Commands
 
 RUN ships a set of public AI skills (`SKILL.md` guides your coding agent reads —
@@ -374,11 +388,42 @@ ledger under `rundot/skills/installed.json` records a checksum of every file so
 updates never overwrite edits you've made — your changes are always preserved
 unless you pass `--force`.
 
-The catalog has three classes of skill: platform workflows
-(`rundot-deploy`, `rundot-monetization`, `rundot-marketing`), game-feature
-implementations (`rundot-feature-*` — copy-in TypeScript templates with
-integration guides, one skill per system), and references
-(`rundot-sdk`, `rundot-new-game`).
+The catalog has four classes of skill:
+
+- **`rundot-cli`** — one router skill for the CLI itself: `SKILL.md` plus
+  `references/<area>.md` (deploy, setup/auth, builds/versions, generate/assets,
+  player data, skills/agents, marketing, troubleshooting). Any command that ships
+  in the binary is documented here, not in its own skill.
+- **Coaching / subject-area skills** — `rundot-game-coach` routes by lifecycle
+  stage into `rundot-analytics`, `rundot-ftue-onboarding`, `rundot-retention`,
+  `rundot-monetization-iap`, `rundot-monetization-ads`, `rundot-polish-feel`,
+  `rundot-marketing-ua-analysis`, `rundot-marketing-assets`,
+  `rundot-marketing-social`, `rundot-multiplayer`, `rundot-syncplay`.
+- **Game-feature implementations** — `rundot-feature-*`: copy-in TypeScript
+  templates with integration guides, one skill per system.
+- **References** — `rundot-sdk`, `rundot-new-game`.
+
+The dividing line: **a skill that documents a CLI command group is a reference of
+`rundot-cli`; a skill that documents game code, SDK behavior, or design strategy
+stays its own skill.** `rundot-deploy` was folded in under that rule and is
+listed in `manifest.json`'s top-level `"retired"` array, alongside
+`rundot-marketing` and `rundot-monetization` — both already split into the
+`rundot-marketing-*` / `rundot-monetization-*` skills — and `rundot-mobile-ux`,
+renamed to `rundot-polish-feel`. All three are still installed in the agent
+directories of anyone who ran `ai setup` before the change.
+
+**Retiring a skill.** Removing an id from `skills` doesn't clean up the copies
+already sitting in creators' agent directories. Add it to `"retired"` instead
+(alongside deleting its folder), and `ai setup`, `skills install`, `skills update`
+and the nudge prune it on their next run via the same edit-preserving path
+`skills uninstall` uses — files the creator edited are kept, empty dirs are
+pruned, and the ledger row is narrowed to the survivors. `--force` is never used
+for a prune. The user-visible line is `Removed N retired RUN skill(s).`
+
+**Adding a skill.** A brand-new catalog entry doesn't install itself either. The
+nudge reports it (`N new RUN skill(s) available — run 'rundot ai setup' to
+install them.`) so an existing install can pick it up; `ai setup` /
+`skills install` do the writing.
 
 Skill content lives under `venus_cli/Assets/Skills/` (one folder per skill +
 `manifest.json`). The `systems/`, `shared/`, `starter/`, and
@@ -430,7 +475,7 @@ scope: `not-installed`, `installed` (matches the embedded version), `needs-updat
 
 ```bash
 rundot skills list
-rundot skills list --scope global --json
+rundot skills list --scope user --json
 ```
 
 ### skills install
@@ -440,9 +485,9 @@ for every detected agent, falling back to Claude when none are detected.
 
 ```bash
 rundot skills install                          # all skills, detected agents
-rundot skills install rundot-deploy            # one skill
+rundot skills install rundot-cli               # one skill
 rundot skills install --agent cursor --agent claude
-rundot skills install --scope global           # install into your home dir
+rundot skills install --scope user             # install into your home dir
 ```
 
 **Options:** `--agent <id>` (repeatable), `--scope project|global`, `--force`
@@ -456,7 +501,7 @@ an empty ledger is a no-op.
 
 ```bash
 rundot skills update
-rundot skills update rundot-deploy --agent claude
+rundot skills update rundot-cli --agent claude
 rundot skills update --force                    # take the embedded version everywhere
 ```
 
@@ -466,7 +511,7 @@ Removes tracked skill files. Files you've edited are left on disk and reported
 (not deleted) unless `--force`.
 
 ```bash
-rundot skills uninstall rundot-deploy --agent claude --yes
+rundot skills uninstall rundot-cli --agent claude --yes
 ```
 
 **Options:** `--agent <id>` (repeatable), `--scope project|global`, `--yes`,
@@ -593,7 +638,7 @@ rundot game upload-build
 - `--uses-preloader`: **[Deprecated]** Whether the host keeps its loading screen up until your game calls `hideLoadScreen()`
 - `--env`: Environment to upload to (Series-internal)
 
-**Note:** After uploading, you'll need to run `rundot game update-tag` to make the version accessible.
+**Note:** After uploading, you'll need to run `rundot game update-release` to make the version accessible.
 
 ### game list-server-configs
 
@@ -666,76 +711,83 @@ rundot game set-private
 
 **Note:** The game will still be accessible via its share link, but won't appear in search results.
 
-### game list-tags
+### game list-releases
 
-Lists all tags for your game. For each tag, the share URL and a scannable QR code are shown in the terminal.
+Lists all releases for your game. For each release, the share URL and a scannable QR code are shown in the terminal.
 
 ```bash
-rundot game list-tags
+rundot game list-releases
 ```
 
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--tag`: Filter by specific tag
-- `--env`: Environment to list tags from (Series-internal)
+- `--env`: Environment to list releases from (Series-internal)
 
-### game update-tag
+> **Note:** `rundot game list-tags` is retained as a backwards-compatible alias.
 
-Updates or creates a tag for your game. Tags are used to point to specific versions with optional configurations.
+### game update-release
+
+Updates or creates a release for your game. Releases point named labels (such as `dev`, `private`, `review`, `public`) to specific versions with optional configurations.
 
 ```bash
-rundot game update-tag <tag-name>
+rundot game update-release <release-name>
 ```
 
 **Arguments:**
 
-- `tag-name`: Name of the tag to update
+- `release-name`: Name of the release to update
 
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
-- `--version`: Version ID to point the tag to
+- `--version`: Version ID to point the release to
 - `--server-config-id`: Server config ID to use
 - `--runtime-config-id`: Runtime config ID to use
 - `--unset-version`: Unset the version ID
 - `--unset-server-config-id`: Unset the server config ID
 - `--env`: Environment to update (Series-internal)
 
-### game delete-tag
+> **Note:** `rundot game update-tag` is retained as a backwards-compatible alias.
 
-Deletes a specific tag for your game.
+### game delete-release
+
+Deletes a specific release for your game.
 
 ```bash
-rundot game delete-tag <tag-name>
+rundot game delete-release <release-name>
 ```
 
 **Arguments:**
 
-- `tag-name`: Name of the tag to delete
+- `release-name`: Name of the release to delete
 
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to delete from (Series-internal)
 
-### game copy-tag
+> **Note:** `rundot game delete-tag` is retained as a backwards-compatible alias.
 
-Copies a tag configuration to another tag.
+### game copy-release
+
+Copies a release configuration to another release.
 
 ```bash
-rundot game copy-tag <source> <target>
+rundot game copy-release <source> <target>
 ```
 
 **Arguments:**
 
-- `source`: The source tag to copy from
-- `target`: The target tag to copy to
+- `source`: The source release to copy from
+- `target`: The target release to copy to
 
 **Options:**
 
 - `--game-id`: The game ID (reads from `game.config.prod.json` if not provided)
 - `--env`: Environment to use (Series-internal)
+
+> **Note:** `rundot game copy-tag` is retained as a backwards-compatible alias.
 
 ### game list-editors
 
@@ -861,12 +913,11 @@ secret can't be revoked directly — only hashed secrets are stored. A subsequen
 
 Both subcommands accept `--game-id` (reads from `game.config.prod.json` if omitted) and `--env` (Series-internal).
 
-Marketing commands use the nearest project `rundot/` folder, or the legacy
-`.rundot/` folder. You can run them from the repository root or from a folder
-inside that project tree. If neither folder exists, `marketing prepare` creates
-`rundot/marketing/` at the nearest Git root. Outside a Git repository, it uses
-the current directory. It does not create a second campaign tree below an
-existing `rundot/` folder.
+Marketing commands read from the nearest project `rundot/` folder, or the legacy
+`.rundot/` folder. `marketing prepare` always creates `rundot/marketing/` at the project
+root or nearest Git root. You can run them from the repository root or from a folder
+inside that project tree. Outside a Git repository, it uses the current directory.
+It does not create a second campaign tree below an existing `rundot/` folder.
 
 ### Reading campaign revenue
 
@@ -1067,6 +1118,9 @@ rundot generate sfx --description "Glass shattering on stone, sharp and bright" 
 
 Generate a video from a text prompt. Supports text-to-video, image-to-video, and
 reference-to-video across multiple providers. Output defaults to `<prompt-slug>.mp4`.
+Executes via asynchronous background job polling with up to a 35-minute completion
+window, supporting long-running and high-resolution models without HTTP gateway timeouts.
+If cancelled via Ctrl+C, the job is cleanly cancelled upstream.
 
 ```bash
 rundot generate video --prompt "A spaceship flying through an asteroid field" \
@@ -1076,28 +1130,37 @@ rundot generate video --prompt "A spaceship flying through an asteroid field" \
 **Options:**
 
 - `--prompt` (required): Text prompt for video generation.
-- `--provider`: `seedance-2.0`, `seedance-2.0-fast`, `seedance-2.0-v2-fast` (enterprise/v2 fast tier), or `kling-3.0-standard`. Default: `seedance-2.0`.
+- `--provider`: AI provider/model identifier (defaults to `seedance-2.0`). Run `rundot generate video-models` to list all available models and their supported modes.
 - `--mode`: `text-to-video`, `image-to-video`, or `reference-to-video`. Default: `text-to-video`.
-- `--duration`: Duration in seconds. Seedance: 4–15. Kling: 3–15.
+- `--duration`: Duration in seconds (per-model bounds; see `generate video-models`).
 - `--seed`: Reproducibility seed.
-- `--negative-prompt`: Negative guidance text (Kling only).
-- `--aspect-ratio`: e.g. `16:9`, `9:16`. Seedance also supports `21:9`, `4:3`, `3:4`. Kling: `16:9`, `9:16`, `1:1`.
-- `--resolution`: `480p`, `720p`, or `1080p` (Seedance only).
+- `--negative-prompt`: Negative guidance text (when supported).
+- `--aspect-ratio`: e.g. `16:9`, `9:16`, `21:9`, `4:3`, `1:1`.
+- `--resolution`: e.g. `480p`, `720p`, `1080p`.
 - `--generate-audio`: Generate accompanying audio.
-- `--camera-fixed`: Fix the camera position (Seedance only).
-- `--cfg-scale`: Classifier-free guidance scale (Kling only).
-- `--shot-type`: `customize` or `intelligent` (Kling only).
+- `--camera-fixed`: Fix the camera position (when supported).
+- `--cfg-scale`: Classifier-free guidance scale (when supported).
+- `--shot-type`: `customize` or `intelligent` (when supported).
 - `--start-image-url`: Starting frame image URL (HTTPS). **Required** for `--mode image-to-video`.
-- `--end-image-url`: Ending frame image URL (HTTPS; Seedance/Kling support varies).
-- `--image-reference`: Style/content reference image (HTTPS URL). Repeat up to 9 times (Seedance reference-to-video).
-- `--video-reference`: Motion reference video (HTTPS URL). Repeat up to 3 times (Seedance reference-to-video).
-- `--audio-reference`: Voice-cloning audio reference (HTTPS URL, 3–5s each, total ≤ 15s). Repeat up to 3 times.
-- `--multi-prompt`: Kling-only multi-prompt segment in the form `prompt=<text>,duration=<seconds>`. Repeat for multiple segments.
+- `--end-image-url`: Ending frame image URL (HTTPS).
+- `--image-reference`: Style/content reference image (HTTPS URL; reference-to-video).
+- `--video-reference`: Motion reference video (HTTPS URL; reference-to-video).
+- `--audio-reference`: Voice-cloning audio reference (HTTPS URL).
+- `--multi-prompt`: Multi-prompt segment in the form `prompt=<text>,duration=<seconds>`. Repeat for multiple segments.
 - `--client-ref`: Opaque correlation ID echoed back in job events.
 - `--request-origin`: Origin tag for analytics/audit.
 - `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
 - `--out`: Output file path.
 - `--json`: Machine-readable JSON output.
+
+### generate video-models
+
+List enabled video-generation models and their capabilities on the platform (tier access applies on generation).
+
+```bash
+rundot generate video-models          # tabular list with provider, mode, resolutions, duration
+rundot generate video-models --json   # full machine-readable JSON catalog
+```
 
 ### generate sprite
 
@@ -1897,20 +1960,20 @@ rundot game list-versions
 rundot list-games
 ```
 
-### Example 4: Advanced Tag Management
+### Example 4: Advanced Release Management
 
 ```bash
-# Upload a build without updating tags
+# Upload a build without updating releases
 rundot game upload-build --bump patch
 
-# Update the 'dev' tag to point to the new version
-rundot game update-tag dev --version 1.0.2
+# Update the 'dev' release to point to the new version
+rundot game update-release dev --version 1.0.2
 
-# List all tags
-rundot game list-tags
+# List all releases
+rundot game list-releases
 
-# Delete a custom tag
-rundot game delete-tag beta
+# Delete a custom release
+rundot game delete-release beta
 ```
 
 ### Example 5: Team Collaboration
