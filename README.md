@@ -951,7 +951,7 @@ launched. Use marketing status to see the provider, platform, campaign ID, and r
 ## Generate Commands
 
 AI asset-generation commands live under the `generate` subcommand: images, audio
-(music, SFX, text-to-speech), video, and sprites. These let you produce game-ready
+(music, SFX, text-to-speech), and video. These let you produce game-ready
 assets from text prompts (and optional reference media) directly from the terminal.
 
 ```bash
@@ -980,9 +980,8 @@ rundot generate <kind> [options]
   is enough — deploy-only fields such as `relativePathToDistFolder` are not
   required. **Credit-spending commands also work with no game ID at all** —
   the generation is then billed to the authenticated creator. That covers
-  `text`, `image`, `music`, `sfx`, `tts`, `video`, `sprite`,
-  `animate-sprite`, `sprite-character-animate`, `sprite-jobs`,
-  `character-workflows`, `design-voice`, `save-voice`, `list-voices`,
+  `text`, `image`, `music`, `sfx`, `tts`, `video`,
+  `design-voice`, `save-voice`, `list-voices`,
   `estimate`, the `image` utilities (`depth`, `remove-bg`, `upscale`,
   `turnaround`, `edit`), and the 3D commands (`generate-3d`, `remesh-3d`,
   `rig-3d`, `animate-3d`).
@@ -995,16 +994,13 @@ rundot generate <kind> [options]
 - **File-key inputs need a game.** Options that take a *file key*
   (`--image-file-key`, `--model-file-key`, `--reference-file-key`,
   `--edit-file-key`) resolve through the game-scoped files API, so they are
-  rejected on a gameless call. Pass a direct URL — or, for sprites, an asset id —
-  instead. In a game directory the config supplies that game; pass `--game-id` only outside a game directory.
+  rejected on a gameless call. Pass a direct URL instead. In a game directory the config supplies that game; pass `--game-id` only outside a game directory.
 - **Where gameless assets live.** Gameless generations are stored under a
   per-creator partition rather than a game's, and their background jobs are
-  polled/drained there too. This is transparent in normal use: a gameless
-  `sprite-character-animate` is recoverable with a gameless `sprite-jobs --drain`.
-  List and remove them with [`rundot assets`](#assets) — same `--game-id`
+  polled/drained there too. List and remove them with [`rundot assets`](#assets) — same `--game-id`
   resolution, so the command run in a game directory operates on that game.
 - **Generated assets count against your storage quota.** Every generated image,
-  sprite, audio clip, and 3D model is stored in RUN's bucket and counted against
+  audio clip, and 3D model is stored in RUN's bucket and counted against
   your creator storage cap — which is **global across all your games**, not
   per-game. Over the cap, generation is refused with a `429`. Free space with
   `rundot assets rm`; see what is using it with `rundot assets list`.
@@ -1019,8 +1015,8 @@ rundot generate <kind> [options]
   asset, recording the generation ID, prompt, model/provider, and other metadata.
 - **`--json`.** Every command supports `--json` for machine-readable output (useful
   for scripting and agents).
-- **Credit-usage reporting.** On success, the image, audio (music/SFX/TTS), video,
-  and sprite commands print the credits charged for the call and your remaining
+- **Credit-usage reporting.** On success, the image, audio (music/SFX/TTS), and video
+  commands print the credits charged for the call and your remaining
   balance — e.g. `Used 800 credits · 47,200 remaining`. The remaining figure is
   omitted (`Used 800 credits`) when the balance can't be read. Under `--json`,
   the same data is on a `credits: { used, remaining }` object. See
@@ -1035,7 +1031,6 @@ by the options that affect its price:
 ```bash
 rundot generate estimate image --model gemini-3-pro-image-preview --image-size 4K
 rundot generate estimate music --duration 60
-rundot generate estimate sprite --quantity 4
 rundot generate estimate text --model claude-sonnet-4-6 --messages-file ./messages.json --max-tokens 2000
 ```
 
@@ -1161,161 +1156,6 @@ List enabled video-generation models and their capabilities on the platform (tie
 rundot generate video-models          # tabular list with provider, mode, resolutions, duration
 rundot generate video-models --json   # full machine-readable JSON catalog
 ```
-
-### generate sprite
-
-Generate a game sprite (optionally pixel art) with style references and reskin
-support. Output defaults to `<prompt-slug>.png`.
-
-```bash
-rundot generate sprite --prompt "A cute slime enemy, side view" --pixel --width 64 --height 64
-```
-
-Generate several candidates in one call with `--variations` (each file gets its
-own `.json` sidecar, and `--json` emits an `assets` array):
-
-```bash
-rundot generate sprite --prompt "A cute slime enemy, side view" --variations 3 --out hero-{n}.png
-```
-
-Generate a texture-oriented tile candidate:
-
-```bash
-rundot generate sprite --prompt "Mossy cobblestone ground" --tileable
-```
-
-**Options:**
-
-- `--prompt` (required): Text prompt for sprite generation.
-- `--pixel`: Generate a pixel-art sprite.
-- `--width`, `--height`: Sprite dimensions in pixels.
-- `--bg`: Background color (e.g. `transparent`).
-- `--smart-crop`: Auto-crop to content bounds. Default `true`; pass `--smart-crop false` or `--no-smart-crop` for exact dimensions.
-- `--pixel-perfect`: Grid-aligned pixel post-processing. Default `true`; set `false` for exact dimensions.
-- `--style`: Art style (e.g. `16-bit SNES`).
-- `--model`: Model to use for generation.
-- `--theme`: Visual theme hint.
-- `--colors`: Comma-separated hex color palette (max 8).
-- `--palette-file`: Reusable comma- or whitespace-separated hex palette file (max 8); mutually exclusive with `--colors`.
-- `--variations`: Number of candidate images per call (1–4). With 2+ variations, `--out` must contain a `{n}` placeholder (1-based index, e.g. `hero-{n}.png`); when `--out` is omitted, `-{n}` is inserted before the extension of the derived name.
-- `--mode`: Generation mode — `assets`, `texture`, or `ui`. Texture mode does not guarantee seamless edges.
-- `--tileable`: Requests texture-oriented output; alias for `--mode texture`. Verify seams after generation.
-- `--resolution`: Output resolution — `1K`, `2K`, or `4K`.
-- `--quality`: Generation quality — `low`, `medium`, or `high`.
-- `--aspect-ratio`: Aspect ratio — `1:1`, `16:9`, or `9:16`.
-- Reference slot (style hint, choose at most one): `--reference-asset-id`, `--reference-file-key`, or `--reference-file` (local image uploaded automatically).
-- Edit slot (structure-preserving reskin anchor, choose at most one): `--edit-asset-id`, `--edit-file-key`, or `--edit-file` (local image uploaded automatically). The edit and reference slots may be combined.
-- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
-- `--out`: Output file path (supports a `{n}` placeholder).
-- `--json`: Machine-readable JSON output.
-
-### generate animate-sprite
-
-Animate an existing sprite into a spritesheet.
-
-```bash
-rundot generate animate-sprite --prompt "walk cycle, side view" \
-  --source-generation-id <id> --frames 8 --format spritesheet
-```
-
-Steer the animation away from artifacts and control the alpha matte:
-
-```bash
-rundot generate animate-sprite --prompt "walk cycle, side view" \
-  --source-generation-id <id> --negative-prompt "blurry, extra limbs" --matte-color "#00ff00"
-```
-
-**Options:**
-
-- `--prompt` (required): Animation prompt (e.g. `walk cycle, side view`).
-- Source (exactly one required): `--source-generation-id`, `--source-file-key`, or `--source-url` (HTTPS).
-- `--frames`: Number of animation frames.
-- `--format`: Output format (e.g. `spritesheet`).
-- `--remove-bg`: Background removal — `None`, `Basic`, or `Pro`. Default: `Basic`.
-- `--pixel`: Force pixel-art animation mode. When omitted, SpriteCook infers the mode from the source asset.
-- `--palette-size`: Pixel-animation palette size, such as `16` or `32`. This controls color count; the animation API does not accept a fixed hex palette.
-- `--negative-prompt`: Negative guidance text for the animation.
-- `--matte-color`: Hex color (`#RRGGBB`) alpha is matted against during animation/background removal. Provider default: `#808080`.
-- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
-- `--out`: Output file path.
-- `--json`: Machine-readable JSON output.
-
-### generate sprite-character-animate
-
-Animate a sprite into a full animation set using character workflow presets
-(idle, walk, jump, ...). Purpose-built for complete character pipelines: each
-animation reports its own result, so one failure does not void the run. Writes
-one spritesheet + `.json` sidecar per completed animation into `--out`.
-
-```bash
-rundot generate sprite-character-animate --game-id <id> \
-  --source-generation-id <id> --animations idle,walk --out ./character
-```
-
-**Options:**
-
-- Source (exactly one required): `--source-generation-id`, `--source-file-key`, or `--source-url` (HTTPS).
-- `--prompt`: Character description (guides the animation model). Defaults to the source generation's prompt when available.
-- `--animations` (required): Comma-separated animation preset names (see `generate character-workflows`).
-- `--workflow`: Workflow/perspective ID — `platformer` (default), `isometric`, or `topdown` (see `generate character-workflows`).
-- `--frames`: Frame count per animation.
-- `--format`: Output format (e.g. `spritesheet`).
-- `--remove-bg`: Background removal — `None`, `Basic`, or `Pro`.
-- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
-- `--out`: Output directory.
-- `--json`: Machine-readable JSON output with per-animation status.
-
-### generate character-workflows
-
-List the available character animation presets (workflow IDs and their
-animation names).
-
-```bash
-rundot generate character-workflows --game-id <id> --json
-```
-
-### generate sprite-models
-
-List sprite-generation models and their per-call credit pricing, as reported
-by the provider. Model slugs and pricing change over time — query them instead
-of hardcoding.
-
-```bash
-rundot generate sprite-models --json
-```
-
-### generate sprite-costs
-
-Show per-operation sprite-generation credit costs without a billed call. Use
-this to preflight the cost of a batch.
-
-```bash
-rundot generate sprite-costs --json
-```
-
-Returns credits per `generate` call (each variation bills as one), per
-`animate` call, and per completed animation in a character-animate run.
-
-### generate sprite-jobs
-
-Drain completed/failed sprite-generation jobs (e.g. a character-animate whose
-CLI invocation was killed while the job finished server-side). Results stay
-available until the job expires; draining is non-destructive.
-
-```bash
-rundot generate sprite-jobs --drain --game-id <id> --json
-
-# Also download the outputs and write the same sidecars the original
-# command would have written:
-rundot generate sprite-jobs --drain --game-id <id> --download ./recovered
-```
-
-**Options:**
-
-- `--drain` (required): Fetch completed/failed sprite-generation jobs.
-- `--download <dir>`: Download job outputs into the directory + write `.json` sidecars.
-- `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
-- `--json`: Machine-readable JSON output.
 
 ### generate tts
 
@@ -1494,7 +1334,7 @@ rundot image edit --prompt <text> --input <url|file|key> [--input ...] [--image-
 Each extra input image beyond the first adds a small surcharge, so pass only the
 references the edit actually needs.
 
-**Example** — restyle a single sprite:
+**Example** — restyle an image:
 
 ```bash
 rundot image edit --prompt "make it winter, add falling snow" --input ./bg.png --out ./bg_winter.png --game-id my-game
@@ -1514,7 +1354,7 @@ rundot image edit --prompt "put the character from image 1 into the scene from i
 
 ## Assets
 
-Generated assets (images, sprites, audio, 3D models) are stored in RUN's bucket
+Generated assets (images, audio, 3D models) are stored in RUN's bucket
 and count against your **creator storage cap**, which is global across all your
 games. `rundot assets` is how you see what is using that space and reclaim it.
 
@@ -1540,7 +1380,7 @@ Use the printed id with `assets rm`.
 
 ```bash
 rundot assets rm <generation-id> --service imagegen
-rundot assets rm <generation-id> --service spritegen --game-id my-game
+rundot assets rm <generation-id> --service audiogen --game-id my-game
 ```
 
 `--service` is required: each service partitions its generations separately, so
