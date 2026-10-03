@@ -121,6 +121,7 @@ The CLI uses a `game.config.prod.json` file to store your game's configuration:
   "relativePathToDistFolder": "./dist",
   "usesPreloader": false,
   "orientation": "landscape",
+  "platformFit": "both",
   "fullscreenEnabled": true
 }
 ```
@@ -131,6 +132,19 @@ The CLI uses a `game.config.prod.json` file to store your game's configuration:
 System API. The default value is `true`. Set it to `false` to opt out. A change
 takes effect with the next deployed version. An older CLI does not send this
 field, so the server applies the default to versions it uploads.
+
+`platformFit` declares which devices your game plays well on: `mobile`,
+`desktop`, or `both`. It is optional — leave it out and your game is offered
+everywhere, exactly as before. When it is set, players on a device class your
+game doesn't fit won't be offered it while browsing the catalog (rows,
+recommendations); search still finds it and a shared or direct link still opens
+it. The value is shown on your game's page, and RUN may adjust it after review
+— your game's page in Studio shows when it has. Set it with `rundot game set-platform-fit`, or pass
+`rundot deploy --platform-fit <value>` to set it for one deploy (the flag
+overrides the file and is saved back to it). It takes effect when the version
+goes public. A deploy without it keeps your earlier answer; to drop a
+`mobile` or `desktop` claim, set `both`. An unrecognized value fails the deploy
+rather than being ignored.
 
 This file is created automatically when you run `rundot init` and makes future deployments easier by storing your game ID and build path.
 
@@ -919,6 +933,29 @@ root or nearest Git root. You can run them from the repository root or from a fo
 inside that project tree. Outside a Git repository, it uses the current directory.
 It does not create a second campaign tree below an existing `rundot/` folder.
 
+### Marketing budget and supplied art
+
+Marketing budgets accept whole credits only. 1,000 credits = $1 USD.
+Use digits without commas or currency signs. Values must be multiples of
+10 credits. Decimal dollar inputs return a credit-specific error.
+
+    rundot marketing prepare --name launch --budget 50000 --days 14
+    rundot marketing prepare --name ongoing-launch --ongoing --daily-budget 50000
+    rundot marketing budget --name launch --credits 100000
+
+The CLI converts credits to integer cents for the server. `--target-cpi` remains
+a separate USD bid target. The internal restore command uses `--budget` in
+credits. `--budget-cents` returns a migration error instead of changing units.
+
+`prepare --override` keeps saved prompts and briefs. Explicit per-kind prompt
+flags replace the corresponding text. Metadata changes print a warning to
+review saved text. Store and video briefs remain saved when their use is disabled.
+
+`marketing submit` accepts supplied art when the selected files pass all submit
+checks. Unfilled generation instructions produce a warning. The required prompt
+fields remain in the server moderation and review record. `marketing generate`
+still blocks unfilled instructions.
+
 ### Reading campaign revenue
 
 `rundot marketing stats --name <campaign>` reports game revenue for the
@@ -941,7 +978,7 @@ paths. See [the deferred deep-link specification](../docs/marketing-deep-links.m
 Unity is available when enabled. Create separate paused campaigns for iOS and
 Android:
 
-    rundot marketing prepare --name launch-ios --network unity --platforms ios --target-cpi 3.00
+    rundot marketing prepare --name launch-ios --network unity --platforms ios --target-cpi 3.00 --budget 500000
 
 Unity requires exactly one square creative and one MP4. `marketing generate` creates
 the MP4 from the prepared video brief after its `[[AGENT: ...]]` direction is filled.
@@ -959,10 +996,11 @@ rundot generate <kind> [options]
 ```
 
 > **Note:** `generate` and its subcommands are now generally available and appear
-> in `rundot --help`. A few other command groups remain beta-gated — hidden until
-> you set `RUNDOT_BETA_FEATURES=1` (or `true`) in your environment: `marketing`,
-> `ugc`, `stats`, `collectibles`, and the `image` utility
-> group (`image depth` / `remove-bg` / `upscale` / `turnaround`). The `image`
+> in `rundot --help`. The `marketing` command group is also generally available for
+> Meta Android campaigns (other networks and platforms remain beta-gated). A few other
+> command groups remain beta-gated — hidden until you set `RUNDOT_BETA_FEATURES=1`
+> (or `true`) in your environment: `stats`, `collectibles`, and the `image`
+> utility group (`image depth` / `remove-bg` / `upscale` / `turnaround`). The `image`
 > utilities are also prod-only and require an interactive `rundot login` (they
 > reject `rk_` API-key sessions). The `analytics` group is shown to everyone (not
 > gated behind `RUNDOT_BETA_FEATURES`) but is still labeled **(beta)**.
@@ -1735,6 +1773,126 @@ rundot files clear <profile-id> [--yes] [--game-id <id>]
 ```
 
 Delete one file, or every file a player has (both require `--yes`).
+
+## UGC Commands
+
+Manage User-Generated Content (UGC) entries, multi-author collaborator permissions, and moderation queues via `rundot ugc`.
+
+All UGC commands accept `--game-id` (reads from `game.config.prod.json` or `game.config.local.json` if omitted) and `--env` (`prod` by default, or `staging`/`dev`/`local`).
+
+### ugc list
+
+List public UGC entries for a game.
+
+```bash
+rundot ugc list [--mine] [--limit <n>] [--cursor <token>] [--save <file>] [--game-id <id>]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--mine` | Show only entries authored by the authenticated user |
+| `--limit <n>` | Maximum number of entries to return (default: 20) |
+| `--cursor <token>` | Pagination cursor |
+| `--save <file>` | Save JSON response to a local file |
+| `--target-app-id <id>` | Target app ID for cross-app UGC |
+
+### ugc get
+
+Get full details and payload of a UGC entry as JSON.
+
+```bash
+rundot ugc get <entry-id> [--save <file>] [--game-id <id>]
+```
+
+### ugc publish
+
+Publish a new UGC entry. The data payload is capped at 100KB locally.
+
+```bash
+rundot ugc publish --content-type <type> --title <title> (--data-file <path> | --data <json>) [--tags <csv>] [--public] [--json] [--dry-run] [--game-id <id>]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--content-type` | Content type for the entry (required) |
+| `--title` | Title for the entry (required) |
+| `--data-file` | Path to JSON payload file (mutually exclusive with `--data`) |
+| `--data` | Inline JSON string payload (mutually exclusive with `--data-file`) |
+| `--tags` | Comma-separated list of tags |
+| `--public` | Set entry visibility to public (default: true) |
+| `--dry-run` | Validate arguments and payload without submitting |
+| `--json` | Output raw JSON response |
+
+### ugc cross-app-create
+
+Publish a UGC entry targeting another app (cross-app UGC).
+
+```bash
+rundot ugc cross-app-create --target-app-id <app-id> --content-type <type> --title <title> (--data-file <path> | --data <json>) [--tags <csv>] [--public] [--json] [--dry-run]
+```
+
+### ugc update
+
+Update metadata or data payload on an entry you own.
+
+```bash
+rundot ugc update <entry-id> [--title <title>] [--public true|false] [--tags <csv>] [--set key=value] [--data-file <path> | --data <json>] [--dry-run] [--json]
+```
+
+### ugc delete
+
+Delete an entry you own. **Destructive** — prompts for confirmation (aborts in non-interactive shells unless `--yes` is passed).
+
+```bash
+rundot ugc delete <entry-id> [--yes] [--game-id <id>]
+```
+
+### ugc shared
+
+List UGC entries that other authors have shared with you as an editor.
+
+```bash
+rundot ugc shared [--limit <n>] [--cursor <token>] [--save <file>] [--game-id <id>]
+```
+
+### ugc members
+
+Manage collaborators (editors) on a UGC entry you own:
+
+```bash
+# List owner and editors
+rundot ugc members list <entry-id> [--game-id <id>]
+
+# Add a collaborator
+rundot ugc members add <entry-id> --profile <profile-id> [--game-id <id>]
+
+# Remove a collaborator (or leave an entry shared with you)
+rundot ugc members remove <entry-id> --profile <profile-id> [--game-id <id>]
+```
+
+### ugc admin
+
+Administrative commands for game owners and editors (requires owner or editor role):
+
+```bash
+# Browse all entries (including private and soft-removed)
+rundot ugc admin browse [--content-type <type>] [--public true|false] [--limit <n>] [--cursor <token>]
+
+# Soft-remove an entry from the public catalog (Destructive — prompts or requires --yes)
+rundot ugc admin remove <entry-id> [--yes]
+
+# List user moderation reports
+rundot ugc admin reports [--status pending|reviewed|dismissed] [--limit <n>]
+
+# Resolve a moderation report
+rundot ugc admin resolve <report-id> --action reviewed|dismissed
+
+# Publish an entry as a designated system author (for cold-start seeding)
+rundot ugc admin publish --author-id <uid> --author-name <name> --content-type <type> --title <title> (--data-file <path> | --data <json>)
+
+# Update an entry as admin (with author reassignment or --skip-moderation)
+rundot ugc admin update <entry-id> [--author-id <uid>] [--author-name <name>] [--skip-moderation] [--title <title>]
+```
 
 ## Usage Examples
 
