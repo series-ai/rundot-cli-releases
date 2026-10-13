@@ -229,7 +229,7 @@ If you don't provide options, the CLI will prompt you for:
 
 ### import
 
-Registers an existing project directory with RUN. For recognized Vite/npm web projects, optionally wires the RUN game SDK (dependency, Vite plugins, entry init) after explicit consent. Other project shapes register only and print guidance. Does not copy project files or invent import counts.
+Registers an existing project directory with RUN. For recognized Vite/npm web projects, optionally wires the RUN game SDK (dependency, Vite plugins, entry import) after explicit consent. Other project shapes register only and print guidance. Does not copy project files or invent import counts.
 
 ```bash
 rundot import ./my-game --yes
@@ -956,6 +956,30 @@ checks. Unfilled generation instructions produce a warning. The required prompt
 fields remain in the server moderation and review record. `marketing generate`
 still blocks unfilled instructions.
 
+### Campaign types (optimization intent)
+
+Pass `--campaign-type` to select what ad networks optimize delivery toward:
+- `traffic-install` (default): Optimizes for link clicks on web, app installs on mobile.
+- `engaged-play`: Optimizes for players who reach 30 seconds of active gameplay or beat level 1. Recommended for entry-level creator budgets (minimum ~15,000 credits/day / $15/day).
+- `tutorial-complete`: Optimizes for players who finish the game's tutorial. The game reports it with `trackFunnelStep(1, 'tutorial_complete', 'onboarding')` or `recordCustomEvent('tutorial_complete')`; mobile-web (`/mini`) legs only (minimum ~25,000 credits/day / $25/day).
+- `signup`: Optimizes for verified email capture or confirmed user account creation (recommended minimum ~50,000 credits/day / $50/day).
+- `purchase`: Optimizes for paying players via server-side Conversions API (CAPI).
+- `value`: Optimizes for higher-value purchasing players (ROAS-based).
+
+Example:
+
+    rundot marketing prepare --name launch-engaged --campaign-type engaged-play --budget 280000 --days 14
+
+### Web destinations and conversion experiments
+
+Web legs can route either to the lightweight mini player (`/mini/{gameId}`) or to the canonical game page (`/{username}/{slug}`).
+
+- `--destination mini|canonical`: Choose the web destination. `mini` runs the lightweight in-app playable with milestone tracking and end-of-play conversion exits. `canonical` routes directly to the clean game page URL (without `cv` query parameters).
+- `--conversion-experiment auto|a2hs|standalone|app|email|rcs`: Playable conversion exit attached to `/mini` URLs (`email` or `rcs` required for `signup` campaigns; `rcs` is US-only).
+- `--landing-url <url>`: Optional explicit custom landing page URL override (takes precedence in deciding destination).
+
+Campaign types `engaged-play`, `tutorial-complete`, and `signup` require `--destination mini`. Mini destination cannot be paired with desktop device targeting.
+
 ### Reading campaign revenue
 
 `rundot marketing stats --name <campaign>` reports game revenue for the
@@ -1109,6 +1133,7 @@ rundot generate image --prompt "A brave knight in golden armor, fantasy game art
 - `--remove-background-variant`: BiRefNet variant `light`, `heavy`, or `portrait` (only with `--remove-background-model birefnet`).
 - `--remove-background-resolution`: BiRefNet resolution `1024x1024` or `2048x2048` (only with `--remove-background-model birefnet`).
 - `--json`: Machine-readable JSON output.
+- `--max-credits`: Maximum credits allowed for generation (non-negative safe integer).
 
 ### generate music
 
@@ -1123,6 +1148,7 @@ rundot generate music --prompt "Upbeat 8-bit chiptune boss theme" --duration 30
 - `--prompt` (required): Text prompt for music generation.
 - `--duration` (required): Duration in seconds (3–300).
 - `--provider`: Audio provider (default: `elevenlabs`).
+- `--model`: Model used by the selected audio provider. If omitted, the provider selects its default model.
 - `--client-ref`: Opaque correlation ID echoed back in job events.
 - `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
 - `--out`: Output file path.
@@ -1156,13 +1182,21 @@ window, supporting long-running and high-resolution models without HTTP gateway 
 If cancelled via Ctrl+C, the job is cleanly cancelled upstream.
 
 ```bash
+# Standard generation
 rundot generate video --prompt "A spaceship flying through an asteroid field" \
   --provider seedance-2.0 --duration 6 --resolution 720p
+
+# Studio workflow with spend cap and idempotency
+rundot generate video --prompt "A spaceship flying through an asteroid field" \
+  --max-credits 500 --idempotency-key "op-1234" --client-ref "flow-5678" --json
+
+# Resume missing download or pending job
+rundot generate video --out "asteroid-flight.mp4" --resume --json
 ```
 
 **Options:**
 
-- `--prompt` (required): Text prompt for video generation.
+- `--prompt`: Text prompt for video generation. Required for new generations.
 - `--provider`: AI provider/model identifier (defaults to `seedance-2.0`). Run `rundot generate video-models` to list all available models and their supported modes.
 - `--mode`: `text-to-video`, `image-to-video`, or `reference-to-video`. Default: `text-to-video`.
 - `--duration`: Duration in seconds (per-model bounds; see `generate video-models`).
@@ -1180,11 +1214,57 @@ rundot generate video --prompt "A spaceship flying through an asteroid field" \
 - `--video-reference`: Motion reference video (HTTPS URL; reference-to-video).
 - `--audio-reference`: Voice-cloning audio reference (HTTPS URL).
 - `--multi-prompt`: Multi-prompt segment in the form `prompt=<text>,duration=<seconds>`. Repeat for multiple segments.
-- `--client-ref`: Opaque correlation ID echoed back in job events.
+- `--client-ref`: Opaque correlation ID echoed back in job events and receipt.
 - `--request-origin`: Origin tag for analytics/audit.
 - `--game-id`: Game ID (reads from `game.config.prod.json` if not provided).
+- `--max-credits`: Maximum credits allowed for generation (non-negative safe integer).
+- `--idempotency-key`: Client idempotency key for video generation.
+- `--resume`: Resume missing video download or poll pending job from sidecar without re-submitting.
 - `--out`: Output file path.
 - `--json`: Machine-readable JSON output.
+
+**Studio workflow and receipts:**
+
+When `--max-credits` is provided:
+1. The CLI verifies that output files and sidecars do not conflict.
+2. The CLI creates an atomic pending intent sidecar (`<output>.json`) with status `"dispatching"`.
+3. The CLI submits the generation job with `draft: false`.
+4. The CLI updates the sidecar with status `"pending"` and the accepted `jobId` before polling.
+5. The CLI polls `GET /v1/jobs/{gameId}/{jobId}` until completed.
+6. The CLI streams the video into a temporary file (max 128 MiB) and validates MP4/WebM bytes.
+7. The CLI atomically moves the video to `--out` and updates `<output>.json` with status `"saved"`.
+
+Receipt shape (`<output>.json` and `--json` stdout):
+```json
+{
+  "schemaVersion": 1,
+  "status": "saved",
+  "gameId": "my-game",
+  "outputPath": "public/assets/video.mp4",
+  "sha256": "abcdef...",
+  "byteSize": 1234567,
+  "generationId": "gen-video-1",
+  "jobId": "job-video-1",
+  "clientRef": "op-ref",
+  "maxCredits": 500,
+  "request": {
+    "prompt": "flying eagle",
+    "provider": "seedance-2.0",
+    "mode": "text-to-video",
+    "durationSeconds": 5.0,
+    "resolution": "720p",
+    "aspectRatio": "16:9",
+    "generateAudio": false,
+    "draft": false,
+    "idempotencyKey": "key-123"
+  },
+  "media": {
+    "durationSeconds": 5.0,
+    "width": 1280,
+    "height": 720
+  }
+}
+```
 
 ### generate video-models
 
@@ -1385,8 +1465,112 @@ rundot image edit --prompt "put the character from image 1 into the scene from i
   --input ./hero.png --input ./scene.png --image-size 2K --out ./composed.png
 ```
 
-> **Related generation commands.** 3D-asset commands (`game generate-3d`,
-> `game remesh-3d`, `game rig-3d`, `game animate-3d`) and image-utility commands
+### game generate-3d
+
+Generate a 3D model (GLB) from a text prompt or an input image.
+
+```bash
+# Text-to-3D generation
+rundot game generate-3d --mode text-to-3d --prompt "A fantasy treasure chest" --out ./chest.glb
+
+# Image-to-3D generation
+rundot game generate-3d --mode image-to-3d --image-url https://example.com/item.png --out ./item.glb
+
+# Machine-readable receipt output
+rundot game generate-3d --mode text-to-3d --prompt "A stone pillar" --json
+```
+
+**Options:**
+
+- `--prompt`: Text prompt for 3D generation (required for `text-to-3d`).
+- `--image-url`: URL of the input image (required for `image-to-3d` if you do not provide `--image-file-key`).
+- `--image-file-key`: Creator-storage file key of the input image.
+- `--mode`: Generation mode: `image-to-3d` or `text-to-3d` (default: `image-to-3d`).
+- `--provider`: 3D model provider: `pixal3d`, `hunyuan3d-v3.1-pro`, `trellis-2`, `meshy`, `tripo-v2.5`, `rodin-v2.5` (default: `hunyuan3d-v3.1-pro`).
+- `--quality`: Generation quality: `draft`, `standard`, `high` (default: `standard`).
+- `--seed`: Reproducibility seed.
+- `--game-id`: Game ID for billing (optional; omitted values bill the creator account).
+- `--max-credits`: Maximum credits allowed for generation (non-negative safe integer).
+- `--out`: Output file path (default: `output.glb`).
+- `--force`: Overwrite the destination file if it exists.
+- `--json`: Machine-readable JSON output.
+
+**Machine receipt (`--json`):**
+
+When you specify `--json`, the command writes a single JSON receipt line to standard output only after it saves the model file and the metadata sidecar:
+
+```json
+{
+  "generationId": "gen-abc12345",
+  "filePath": "output.glb",
+  "provider": "hunyuan3d-v3.1-pro",
+  "mode": "text-to-3d",
+  "quality": "standard",
+  "seed": 42
+}
+```
+
+The command suppresses terminal spinners and progress lines during JSON output. If generation, download, or sidecar writes fail, the command emits no receipt to standard output and writes errors to standard error.
+
+**Metadata sidecar:**
+
+The command writes a `<output>.json` sidecar file next to the model. It records:
+- `generationId`: The remote generation identifier.
+- `prompt`: The approved prompt text.
+- `provider`: The selected provider.
+- `mode`: The generation mode.
+- `quality`: The selected quality preset.
+- `gameId`: The billing game ID if provided.
+- `clientRef`: The correlation identifier if provided.
+- `outputPath`: The saved file path.
+- `status`: Set to `"pending"` before download, and updated to `"saved"` after the file is saved.
+- `sha256`: The SHA-256 hash of the saved artifact.
+
+The command writes the sidecar immediately after the API returns a generation ID and before the download starts. This step preserves the remote generation identity if the download fails.
+
+### game animate-3d
+
+Generate 3D character animation clips from a local GLB model or a previous rig. Saves the rigged base model and all requested canonical animation clips (`anim_<name>.glb`).
+
+```bash
+# Animate a local GLB model with canonical presets
+rundot game animate-3d --input public/models/hero.glb --source-sha256 e3b0c4... \
+  --animations idle,walk --max-credits 800 --client-ref "hero-anim" \
+  --out-dir public/assets/animations3d/hero --json
+
+# Resume missing downloads from existing receipt
+rundot game animate-3d --out-dir public/assets/animations3d/hero --resume --json
+```
+
+**Options:**
+
+- `--input`: Local GLB model path (max 23 MiB). Mutually exclusive with `--rig-id`.
+- `--source-sha256`: Expected SHA-256 hex digest of the input GLB model. Verified before upload.
+- `--animations`: Canonical animation presets: `idle`, `walk`, `run`, `jump` (1 to 4 unique presets, comma-separated or space-separated).
+- `--rig-id`: Legacy rig task ID from a previous `rig-3d` call (mutually exclusive with `--input`).
+- `--out-dir`: Destination directory for the model and clip bundle (default: current directory).
+- `--max-credits`: Maximum credits allowed for generation (non-negative safe integer).
+- `--client-ref`: Opaque correlation ID echoed in job events and receipt.
+- `--game-id`: Game ID for file upload and billing.
+- `--force`: Overwrite existing files in legacy mode.
+- `--resume`: Download missing outputs from known URLs in existing sidecar without re-submitting.
+- `--json`: Machine-readable JSON output.
+
+**Studio workflow and output bundle:**
+
+1. The CLI verifies that output files and sidecars do not conflict.
+2. The CLI reads the local input GLB, validates GLB2 magic bytes, chunk lengths, and JSON chunk (≤ 23 MiB), and verifies `--source-sha256`.
+3. The CLI normalizes animations to canonical set (`idle`, `walk`, `run`, `jump`).
+4. The CLI uploads the source GLB privately via `FilesApiClient`.
+5. The CLI writes an atomic pending intent sidecar at `<out-dir>/model.glb.json` with status `"dispatching"`.
+6. The CLI calls `POST /v1/threedgen/{gameId}/sync-animate`.
+7. The CLI updates the sidecar to `"download_pending"` with model and clip URLs.
+8. The CLI downloads rigged base model `<out-dir>/model.glb` and every requested clip `<out-dir>/anim_<name>.glb` (≤ 23 MiB each) and validates GLB2 structure on each file.
+9. If any clip fails or is missing, the command fails and does not mark the receipt as `"saved"`.
+10. When all files are verified and durable, the CLI writes `<out-dir>/model.glb.json` with status `"saved"`.
+
+> **Related generation commands.** Other 3D commands (`game remesh-3d`,
+> `game rig-3d`) and image-utility commands
 > (`image depth`, `image remove-bg`, `image upscale`) live outside the `generate`
 > group and are not yet documented here.
 
