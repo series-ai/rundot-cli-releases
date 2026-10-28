@@ -22,6 +22,7 @@ Looking for the SDK API docs? They ship inside the `@series-inc/rundot-game-sdk`
   - [generate](#generate-commands)
   - [intel](#intel-commands)
   - [socials](#social-launch-packet-commands)
+  - [rooms](#rooms-commands)
 - [Usage Examples](#usage-examples)
 - [Troubleshooting](#troubleshooting)
 
@@ -141,8 +142,8 @@ recommendations); search still finds it and a shared or direct link still opens
 it. The value is shown on your game's page, and RUN may adjust it after review
 — your game's page in Studio shows when it has. Set it with `rundot game set-platform-fit`, or pass
 `rundot deploy --platform-fit <value>` to set it for one deploy (the flag
-overrides the file and is saved back to it). It takes effect when the version
-goes public. A deploy without it keeps your earlier answer; to drop a
+overrides the file and is saved back to it). It takes effect once the upload is
+ready, including for private builds. A deploy without it keeps your earlier answer; to drop a
 `mobile` or `desktop` claim, set `both`. An unrecognized value fails the deploy
 rather than being ignored.
 
@@ -270,6 +271,7 @@ rundot deploy
 - `--changelog`: Release notes for this version (markdown), shown on the game's About tab
 - `--changelog-file`: Read the release notes from a file instead of `--changelog`. Mutually exclusive with it. For headless callers that shouldn't put creator-authored prose on a command line
 - `--json`: Print the result as a single JSON line instead of the human summary (see below)
+- `--close-rooms`: After the deploy, close the game's rooms still on an older bundle and report the result, like `rundot rooms close --outdated --yes` (see [Live multiplayer rooms](#live-multiplayer-rooms-after-a-deploy))
 - `--env`: Environment to deploy to (Series-internal)
 
 **Version Bumping:**
@@ -307,6 +309,15 @@ On failure the command prints a JSON error line and still exits 1:
 ```json
 {"success":false,"error":"GameToLargeException: Game file is too large"}
 ```
+
+<a id="live-multiplayer-rooms-after-a-deploy"></a>
+**Live multiplayer rooms after a deploy:**
+
+A deploy never prompts about rooms. Live rooms keep running the bundle they started on until they close.
+
+- When the build carries a room server (`server-bundle.js` or `rooms.config.json`), the deploy then prints how many live rooms are still on an older bundle, with `rundot rooms close --outdated`. This is best effort: it gives up silently after a few seconds or on any error, and never changes the exit code. Right after a deploy the new tag can take a moment to be visible, so the count may be low.
+- `--close-rooms` is the opt-in: after the deploy, it closes the outdated rooms without prompting and reports per instance, as `rundot rooms close --outdated --yes` does. With nothing outdated it says so. If the close fails, the deploy still exits 0, and a warning prints the command to retry: the deploy itself succeeded, and a non-zero exit would make CI retry the deploy.
+- Under `--json`, both write to stderr, so stdout stays the one JSON line.
 
 **Example:**
 
@@ -956,6 +967,15 @@ checks. Unfilled generation instructions produce a warning. The required prompt
 fields remain in the server moderation and review record. `marketing generate`
 still blocks unfilled instructions.
 
+### Meta asset limits and Dynamic Creative
+
+Meta Dynamic Creative (placement delivery or any web leg) enforces a combined
+limit of 10 images and videos. In asset-pool mode without a web leg, app-only
+campaigns allow up to 30 images and 10 separate videos. Google campaigns allow up
+to 20 images (10 square + 10 landscape). When `campaign.json` has no ad copy,
+`marketing generate` has RUN's ad copywriter write five distinct headlines and
+primary texts; `--refresh-copy` replaces existing copy. See [Marketing Creative Best Practices](venus_cli/Assets/Marketing/prepare-help.md) for full delivery rules and family planning.
+
 ### Campaign types (optimization intent)
 
 Pass `--campaign-type` to select what ad networks optimize delivery toward:
@@ -978,7 +998,7 @@ Web legs can route either to the lightweight mini player (`/mini/{gameId}`) or t
 - `--conversion-experiment auto|a2hs|standalone|app|email|rcs`: Playable conversion exit attached to `/mini` URLs (`email` or `rcs` required for `signup` campaigns; `rcs` is US-only).
 - `--landing-url <url>`: Optional explicit custom landing page URL override (takes precedence in deciding destination).
 
-Campaign types `engaged-play`, `tutorial-complete`, and `signup` require `--destination mini`. Mini destination cannot be paired with desktop device targeting.
+Campaign types `tutorial-complete` and `signup` require `--destination mini`. `engaged-play` defaults to `mini` and also accepts `--destination canonical` on any device. Mini destination cannot be paired with desktop device targeting.
 
 ### Reading campaign revenue
 
@@ -989,6 +1009,15 @@ game ad revenue. It excludes wallet purchases until the value is spent in the
 game. Provider conversion value is a diagnostic. It is not game revenue. Ad
 revenue can lag through the last finalized UTC day shown by the command.
 
+### Retention reporting
+
+`rundot marketing stats --name <campaign>` reports rolling retention separately from legacy calendar retention.
+Rolling retention measures user return activity in an exact 24-hour interval after the attributed first session (such as 24–48 hours for D1).
+The calculation requires 10 seconds of observed session duration.
+The command displays four explicit states: measured (`returned/eligible`), pending, unavailable, or error.
+Measured values include the source warehouse snapshot identifier.
+Legacy calendar retention displays to-date return rates without exact rolling intervals.
+
 ### Campaign app deep links
 
 Meta iOS and Android app legs use the game id and selected tag to build a
@@ -996,6 +1025,24 @@ server-side `run.game://app` deferred target. Meta receives that value in its
 deep-link field and receives the HTTPS app-store URL separately. Do not add a
 deep-link string to `campaign.json`. Unity and Google use separate provider
 paths. See [the deferred deep-link specification](../docs/marketing-deep-links.md).
+
+`rundot marketing preview` resolves your campaign against the server and reports
+one line per leg. Every valid leg has one destination — your game — and if a
+campaign cannot open your game (for example, the game has no working OneLink or
+a Google app campaign targets an unpublished tag), the server refuses it with
+the reason:
+
+    google:android: the ad points at your game.
+
+| Line | What it means |
+|---|---|
+| `the ad points at your game.` | Ready. A native leg is set up for the game; the platform resolves the route after install. |
+| `the ad opens your game in a browser.` | Ready. A web leg lands on the game page. |
+
+The preview never prints RUN's Google Ads account, the internal carrier URI, the provider
+attribution tags, or provider error text. Those are RUN internals; the server withholds
+them for creators and only a platform operator sees them. See
+[the deferred deep-link specification](../docs/marketing-deep-links.md).
 
 ## Unity Ads marketing
 
@@ -2078,6 +2125,67 @@ rundot ugc admin publish --author-id <uid> --author-name <name> --content-type <
 rundot ugc admin update <entry-id> [--author-id <uid>] [--author-name <name>] [--skip-moderation] [--title <title>]
 ```
 
+## Rooms Commands
+
+`rundot rooms` shows a multiplayer game's live rooms, reads their logs, and closes them, for example to move players off an older server bundle after a deploy. It works on one game: `--game-id`, or the `gameId` in the current folder's `game.config.<env>.json`. It needs a `rundot login` session for an owner or editor of the game, or the game's `rk_` API key (`rundot login --api-key-stdin`); a key for another game is refused. Every command accepts `--env` (the active env by default).
+
+```bash
+# The game's live rooms: type, kind, code (or persistent key), players, bundle, age, idle time, pending close
+rundot rooms list [--json]
+rundot rooms list --watch [--interval <seconds>]
+
+# Close rooms. Pick exactly one scope; previews the rooms and players, then confirms (or --yes)
+rundot rooms close --outdated            # rooms still on an older bundle than their tag points at
+rundot rooms close --all                 # every live room
+rundot rooms close --type <roomType>     # every room of one type
+rundot rooms close --room <code>         # one room, by its join code
+rundot rooms close --type <roomType> --key <persistentKey>   # one persistent room
+#   [--grace <seconds>] [--yes] [--no-wait]
+
+# Follow or cancel a close by the id `rooms close` printed
+rundot rooms close-status <close-id>
+rundot rooms close-cancel <close-id>
+
+# The game's room logs, one page: room code's console.* and this.log, its errors, and each room's lifecycle
+rundot rooms logs [--since <15m|ISO>] [--until <15m|ISO>] [--room <code-or-id>] [--type <roomType>]
+                  [--level <debug|info|warn|error>] [--limit <lines>] [--json]
+```
+
+- **What a close does:** players are told their room ended. Persistent rooms save, and come back with their world on the next join, on the new bundle. Standard and match rooms come back empty.
+- `list`: an empty list is normal, because rooms only exist while players are in them. A room's bundle is flagged `(outdated)` when its tag now points at a newer bundle, and `(unknown)` when the room recorded no tag. `IDLE` is coarse: the room server records activity at most every 5 minutes. Orphaned rooms (their instance stopped heartbeating) aren't listed and no close reaches them; the count is printed. If the server hit its 2000-room read cap, `list` warns that counts are lower bounds. `--json` prints the server's response on stdout and nothing else.
+- `list --watch` refreshes every `--interval` seconds (default 5, minimum 2) until Ctrl+C. In a terminal it redraws one table; otherwise it prints a timestamped snapshot per refresh. It can't be combined with `--json`.
+- `close` with no scope asks which one in a terminal (outdated first), and fails in a non-interactive shell. Without `--yes` a non-interactive shell stops after the preview, like every destructive command. `--grace` (0–900 seconds, default 0) gives the game a countdown before the close; the close can be cancelled until it fires.
+- `close` waits by default: it polls the close until every instance reported, up to 2 minutes past the close time, then prints what each instance closed and names any that never reported. It exits 0 only when every instance reported and no room failed to close. `--no-wait` returns once the close is accepted and prints the `close-status` (and, with a grace period, `close-cancel`) command.
+- Nothing in scope: `--outdated` and `--all` exit 0 ("nothing to close"); `--type`, `--room` and `--key` exit 1, since a name that matches nothing is usually a typo.
+- `close-cancel` answers 409 once the close fired, and 404 for a close that isn't this game's.
+- `logs` reads one page: by default the last hour and 100 lines (`--limit` up to 200). The server sends the newest lines first; they print oldest first, as `time  LEVEL  ROOM  message`. A message's later lines (a stack) are indented under it, and control and format characters print as `\u{XXXX}`, so a logged string can't fake a line or drive the terminal. `ABCDEF#1` is room `ABCDEF` after its first crash recovery. `--since`/`--until` take a duration back from now (`30s`, `15m`, `2h`, `3d`) or an ISO time. When older lines exist, it prints the whole command for the next page: the same filters with fixed `--since`/`--until` and `--page`, as `--flag=value`, quoted so it pastes the same into a POSIX shell, PowerShell or cmd. If a value has characters no single quoting covers for all three, it lists the flags to add instead.
+- What `logs` shows: room code's `console.*` and `this.log` (with any `child` context), errors its handlers throw with the bundle's own stack frames, and the platform's lines about each room: started, crashed, recovering, recovered, CPU-throttled, stopped after not shutting down, and ended with why. Each room can log 50 lines or 64 KB per 10 seconds; a `logs dropped` line counts the rest. Lines are kept 30 days, and only from when room logs were switched on in that environment. A 429 means the platform's shared log-read budget is spent and says how long to wait; a 503 means room logs aren't available in that environment yet. `--json` prints the server's response on stdout and nothing else.
+
+### rooms admin
+
+`rundot rooms admin` is staff tooling for the sharded multiplayer room server, over cloud-run's `/v1/mp-rooms/admin` API (the same data as the admin panel's rooms page). Every command needs a `rundot login` session whose account has the admin role, and accepts `--env` (the active env by default).
+
+```bash
+# Live rooms, filtered client-side; --instance matches an id prefix
+rundot rooms admin list [--game <gameId>] [--shard <shardId>] [--instance <instanceId>] [--orphaned] [--json]
+
+# Shards, their instances, load against capacity, heartbeat age and revision traffic (live/canary/draining)
+rundot rooms admin shards
+
+# Close one room (every instance hosting it), or every live room of a game. Destructive: prompts, or requires --yes
+rundot rooms admin close <room-id> [--delay <seconds>] [--yes]
+rundot rooms admin close --game <gameId> [--delay <seconds>] [--yes]
+
+# Follow or cancel a close by the id `rooms admin close` printed
+rundot rooms admin close-status <close-id>
+rundot rooms admin close-cancel <close-id>
+```
+
+- `list` warns when the server hit its 2000-room read cap: the list is then incomplete and every count is a lower bound. A room's state is `live`, `orphaned` (its instance has no fresh heartbeat), or `closes in <t> [<close-id>]` when a close is pending.
+- `close` authorizes the whole scope, not a list: the server re-resolves the scope when the close arrives. Before sending (with or without `--yes`) it prints the environment, the scope and an estimate of the rooms and players it covers right now, with a preview of those rooms. Orphaned rooms are skipped: nothing is listening on their instance. `--delay` is 0–900 seconds; the room server ignores a close more than 16 minutes ahead.
+- `close-cancel` works until the close fires; after that the server answers 409 and the CLI says it is too late.
+- `close-status` lists each instance as `pending` until it reports. An instance reports once all its rooms have ended, so a delayed close reports after its delay.
+
 ## Usage Examples
 
 ### Example 1: Creating and Deploying a New Game
@@ -2256,3 +2364,5 @@ count, stable failure code, and successful artifact/runtime identity fields.
 - **Use `--help` liberally**: Every command has detailed help available with the `--help` flag
 - **Keep the CLI updated**: Run `rundot update` regularly to get the latest features and bug fixes
 - **Backup your game.config.prod.json**: Keep this file in version control for team collaboration
+
+CSV includes `retention_queries` when a canonical batch exists. This field contains the full JSON batch array. It preserves each definition, count, state, and source receipt. CSV includes `retention_read_error` when a saved canonical result fails validation. This field keeps the error code and receipt.
