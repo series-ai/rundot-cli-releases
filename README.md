@@ -2159,7 +2159,8 @@ rundot rooms logs [--since <15m|ISO>] [--until <15m|ISO>] [--room <code-or-id>] 
 - Nothing in scope: `--outdated` and `--all` exit 0 ("nothing to close"); `--type`, `--room` and `--key` exit 1, since a name that matches nothing is usually a typo.
 - `close-cancel` answers 409 once the close fired, and 404 for a close that isn't this game's.
 - `logs` reads one page: by default the last hour and 100 lines (`--limit` up to 200). The server sends the newest lines first; they print oldest first, as `time  LEVEL  ROOM  message`. A message's later lines (a stack) are indented under it, and control and format characters print as `\u{XXXX}`, so a logged string can't fake a line or drive the terminal. `ABCDEF#1` is room `ABCDEF` after its first crash recovery. `--since`/`--until` take a duration back from now (`30s`, `15m`, `2h`, `3d`) or an ISO time. When older lines exist, it prints the whole command for the next page: the same filters with fixed `--since`/`--until` and `--page`, as `--flag=value`, quoted so it pastes the same into a POSIX shell, PowerShell or cmd. If a value has characters no single quoting covers for all three, it lists the flags to add instead.
-- What `logs` shows: room code's `console.*` and `this.log` (with any `child` context), errors its handlers throw with the bundle's own stack frames, and the platform's lines about each room: started, crashed, recovering, recovered, CPU-throttled, stopped after not shutting down, and ended with why. Each room can log 50 lines or 64 KB per 10 seconds; a `logs dropped` line counts the rest. Lines are kept 30 days, and only from when room logs were switched on in that environment. A 429 means the platform's shared log-read budget is spent and says how long to wait; a 503 means room logs aren't available in that environment yet. `--json` prints the server's response on stdout and nothing else.
+- What `logs` shows: room code's `console.*` and `this.log` (with any `child` context), errors it throws or logs with their stack, and the platform's lines about each room: started, crashed, recovering, recovered, CPU-throttled, stopped after not shutting down, and ended with why. Each room can log 50 lines or 64 KB per 10 seconds; a `logs dropped` line counts the rest. Lines are kept 30 days, and only from when room logs were switched on in that environment. A 429 means the platform's shared log-read budget is spent and says how long to wait; a 503 means room logs aren't available in that environment yet. `--json` prints the server's response on stdout and nothing else.
+- Stack frames show the source file, line and column when the deployed build carries `dist/server-bundle.js.map` (the multiplayer plugin writes it); cloud-run maps them when it reads the logs. Without a map they show the bundle's line and column.
 
 ### rooms admin
 
@@ -2366,3 +2367,26 @@ count, stable failure code, and successful artifact/runtime identity fields.
 - **Backup your game.config.prod.json**: Keep this file in version control for team collaboration
 
 CSV includes `retention_queries` when a canonical batch exists. This field contains the full JSON batch array. It preserves each definition, count, state, and source receipt. CSV includes `retention_read_error` when a saved canonical result fails validation. This field keeps the error code and receipt.
+
+
+## textGen init
+
+Create a textGen spend config from the game project folder:
+
+```sh
+rundot textGen init
+```
+
+The command creates `rundot/textGen.config.json`. If the project uses the legacy
+`.rundot/` folder, it writes there instead. The starter sets `dailyCreditCap` to
+500000 and `perUserDailyCreditCap` to 10000. Edit the file to change the caps.
+The command needs no login. It preserves an existing declaration in the RUN
+folder, a legacy config file, or the base server config. It reports unreadable
+config without changing it.
+
+Deploy does not create AI service configs from SDK symbols or bundled code.
+A source call to textGen can produce a warning when no config is declared.
+The warning does not change service settings or budgets. Without an explicit
+textGen config, the server default caps still apply. Undeclared imageGen,
+audioGen, videoGen, spriteGen, and threeDGen services also use server default
+caps. They do not need an automatically written declaration.
