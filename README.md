@@ -998,7 +998,7 @@ Web legs can route either to the lightweight mini player (`/mini/{gameId}`) or t
 - `--conversion-experiment auto|a2hs|standalone|app|email|rcs`: Playable conversion exit attached to `/mini` URLs (`email` or `rcs` required for `signup` campaigns; `rcs` is US-only).
 - `--landing-url <url>`: Optional explicit custom landing page URL override (takes precedence in deciding destination).
 
-Campaign types `tutorial-complete` and `signup` require `--destination mini`. `engaged-play` defaults to `mini` and also accepts `--destination canonical` on any device. Mini destination cannot be paired with desktop device targeting.
+Campaign types `tutorial-complete` and `signup` require `--destination mini`. `engaged-play` defaults to `mini` and also accepts `--destination canonical` on any device. On `--network google`, `engaged-play` runs web legs only on the canonical game page: an unset destination resolves to `canonical`, `mini` is rejected, and bidding is `maximize-conversions` on the engaged-play conversion (the game page uploads it to Google Ads for a Google click). The server must have `GOOGLE_ADS_WEB_ENGAGED_PLAY_CONVERSION_ACTION` and `GOOGLE_ADS_WEB_ENGAGED_PLAY_CUSTOM_GOAL` set. Mini destination cannot be paired with desktop device targeting.
 
 ### Reading campaign revenue
 
@@ -2133,6 +2133,7 @@ rundot ugc admin update <entry-id> [--author-id <uid>] [--author-name <name>] [-
 # The game's live rooms: type, kind, code (or persistent key), players, bundle, age, idle time, pending close
 rundot rooms list [--json]
 rundot rooms list --watch [--interval <seconds>]
+rundot rooms list --ended [--limit <rooms>] [--json]
 
 # Close rooms. Pick exactly one scope; previews the rooms and players, then confirms (or --yes)
 rundot rooms close --outdated            # rooms still on an older bundle than their tag points at
@@ -2153,7 +2154,8 @@ rundot rooms logs [--since <15m|ISO>] [--until <15m|ISO>] [--room <code-or-id>] 
 
 - **What a close does:** players are told their room ended. Persistent rooms save, and come back with their world on the next join, on the new bundle. Standard and match rooms come back empty.
 - `list`: an empty list is normal, because rooms only exist while players are in them. A room's bundle is flagged `(outdated)` when its tag now points at a newer bundle, and `(unknown)` when the room recorded no tag. `IDLE` is coarse: the room server records activity at most every 5 minutes. Orphaned rooms (their instance stopped heartbeating) aren't listed and no close reaches them; the count is printed. If the server hit its 2000-room read cap, `list` warns that counts are lower bounds. `--json` prints the server's response on stdout and nothing else.
-- `list --watch` refreshes every `--interval` seconds (default 5, minimum 2) until Ctrl+C. In a terminal it redraws one table; otherwise it prints a timestamped snapshot per refresh. It can't be combined with `--json`.
+- `list --watch` refreshes every `--interval` seconds (default 5, minimum 2) until Ctrl+C. In a terminal it redraws one table; otherwise it prints a timestamped snapshot per refresh. Each crash takes one line here; plain `list` prints its stack. It can't be combined with `--json`.
+- `list --ended`: a room that never started isn't listed; find it with `rooms logs --level error`.
 - `close` with no scope asks which one in a terminal (outdated first), and fails in a non-interactive shell. Without `--yes` a non-interactive shell stops after the preview, like every destructive command. `--grace` (0–900 seconds, default 0) gives the game a countdown before the close; the close can be cancelled until it fires.
 - `close` waits by default: it polls the close until every instance reported, up to 2 minutes past the close time, then prints what each instance closed and names any that never reported. It exits 0 only when every instance reported and no room failed to close. `--no-wait` returns once the close is accepted and prints the `close-status` (and, with a grace period, `close-cancel`) command.
 - Nothing in scope: `--outdated` and `--all` exit 0 ("nothing to close"); `--type`, `--room` and `--key` exit 1, since a name that matches nothing is usually a typo.
