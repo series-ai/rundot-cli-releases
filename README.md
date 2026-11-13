@@ -74,13 +74,19 @@ You should see the list of available commands and options.
 ### Publishing a NEW game to RUN.world
 
 ```bash
-# 1. Login to RUN.world(required for authentication)
+# 1. Login to RUN.world (required for authentication)
 rundot login
 
-# 2. Initialize a new game (creates game.config.prod.json automatically)
-rundot init
+# 2. Start a game from a template (downloads it, registers the game, writes game.config.prod.json)
+rundot init --template 2d-pixi my-game
 
-# 3. Deploy your game
+# 3. Try it locally
+cd my-game
+npm install
+npm run dev
+
+# 4. Build and deploy your game
+npm run build
 rundot deploy
 
 # List your games
@@ -200,14 +206,21 @@ rundot login
 
 ### init
 
-Initializes a new game on RUN.world. This is the first command you should run when setting up a new game.
+Starts a new game from a template, or registers an existing project. This is the first command you should run when setting up a new game.
 
 ```bash
-rundot init
+rundot init --template 2d-pixi my-game   # new game from a template, into ./my-game
+rundot init                              # in an empty directory: pick a template
+rundot init --name "My Game"             # in an existing project: register it
 ```
+
+**Arguments:**
+
+- `directory` (optional, with `--template` only): Where to put the template. Defaults to the current directory, which must be empty. A named directory must be empty or not exist yet.
 
 **Options:**
 
+- `--template`: Template to start from: `2d-pixi` (2D Starter Kit: Pixi.js v8 + React + Tailwind), `3d-react` (3D Starter Kit: Three.js), `csn-runner` (Endless Runner), `csn-launcher` (Launcher), `tower-defense` (Tower Defense). Templates are served from the RUN module store.
 - `--name`: The name of your game
 - `--description`: Description of your game
 - `--build-path`: Path to your game's distribution/build folder
@@ -217,9 +230,15 @@ rundot init
 
 **What it does:**
 
-1. Prompts for game details (name, description, build path) if not provided
-2. Creates a new game on RUN.world
-3. Creates a `game.config.prod.json` file in your current directory with the game ID and settings
+1. With `--template`, downloads the template into the target directory
+2. With no `--template` in an empty directory, lists the templates: an interactive terminal picks one; a non-interactive run prints the ids and exits 1, asking for `--template <id>`
+3. Prompts for game details (name, description, build path) if not provided. Non-interactive runs need `--name`.
+4. Creates a new game on RUN.world
+5. Creates a `game.config.prod.json` file in the project directory with the game ID and settings
+
+In a directory that already has a project, `init` registers that project (steps 3–5).
+
+`init` does not run `npx rundot-sdk-setup`; templates ship their own `CLAUDE.md`. Run it yourself to copy the full SDK docs into `rundot/docs/`.
 
 **Interactive Mode:**
 If you don't provide options, the CLI will prompt you for:
@@ -451,7 +470,7 @@ install them.`) so an existing install can pick it up; `ai setup` /
 `skills install` do the writing.
 
 Skill content lives under `venus_cli/Assets/Skills/` (one folder per skill +
-`manifest.json`). The `systems/`, `shared/`, `starter/`, and
+`manifest.json`). The `systems/`, `shared/`, `docs/`, and
 `references/run-sdk-notes.md` payloads inside the feature/new-game/sdk skills
 are **generated** — vendored from the private
 [run-game-helpers](https://github.com/series-ai/run-game-helpers) repo by
@@ -548,7 +567,7 @@ Advanced commands for managing your game are available under the `game` subcomma
 
 ### game create
 
-Creates a new game on RUN.world. This is an alias for `init` under the `game` subcommand.
+Creates a new game on RUN.world. This is an alias for `init` under the `game` subcommand, including `--template` and the `directory` argument.
 
 ```bash
 rundot game create
@@ -1401,7 +1420,7 @@ Run an LLM chat completion from a messages file. Result is written to **stdout**
 completion is billed directly to the authenticated creator's credits.
 
 ```bash
-rundot generate text --model claude-sonnet-4-5 --messages-file ./messages.json
+rundot generate text --model claude-sonnet-5.5 --messages-file ./messages.json
 ```
 
 The messages file is a JSON `AiMessage[]` array.
@@ -1659,7 +1678,8 @@ its bytes to your storage quota**.
 ## Intel Commands
 
 Competitive market intelligence for creators — rankings, modeled downloads,
-Steam concurrency, ad-creative galleries, and full competitor dossiers.
+Steam and Roblox census metrics, ad-creative galleries, and full competitor
+dossiers.
 
 **Access & pricing.** Intel is gated to paying creators (creator tier or
 higher) and switchable via a server-side kill-switch. It's priced in RUN.world
@@ -1694,11 +1714,19 @@ dossier is `ready` to download or must be `generate`d. Free.
 ```bash
 rundot intel snapshot "Slay the Spire"
 rundot intel snapshot 553834731 --json
+rundot intel snapshot steam:646570
+rundot intel snapshot roblox:994732206
+rundot intel snapshot roblox:994732206 --json
 ```
 
 Free headline metrics: top rank, rating velocity, modeled downloads (`Est.`
-band), Steam concurrent players and owners where listed, and active-creative
-counts.
+band), concurrent players and Steam owners where listed, and active-creative
+counts. Steam snapshots also include price, release, genres, top weighted
+tags, English/all-language review summaries, and average playtime. Roblox
+snapshots include playing count, lifetime visits, favorites, votes, genres,
+creator, and the latest daily average/peak player metrics when historical
+coverage exists. Use `intel search` first when a name is ambiguous, then pass
+the exact `steam:` or `roblox:` app ID.
 
 ### intel dossier
 
@@ -2127,7 +2155,7 @@ rundot ugc admin update <entry-id> [--author-id <uid>] [--author-name <name>] [-
 
 ## Rooms Commands
 
-`rundot rooms` shows a multiplayer game's live rooms, reads their logs, and closes them, for example to move players off an older server bundle after a deploy. It works on one game: `--game-id`, or the `gameId` in the current folder's `game.config.<env>.json`. It needs a `rundot login` session for an owner or editor of the game, or the game's `rk_` API key (`rundot login --api-key-stdin`); a key for another game is refused. Every command accepts `--env` (the active env by default).
+`rundot rooms` shows a multiplayer game's live rooms, inspects one, reads their logs, shows their health by day, saves or kills one, and closes them, for example to move players off an older server bundle after a deploy. `rooms state` and `rooms db` download and delete what the rooms store: persistent and singleton room state, and the game's database. It works on one game: `--game-id`, or the `gameId` in the current folder's `game.config.<env>.json`. It needs a `rundot login` session for an owner or editor of the game, or the game's `rk_` API key (`rundot login --api-key-stdin`); a key for another game is refused. Every command accepts `--env` (the active env by default).
 
 ```bash
 # The game's live rooms: type, kind, code (or persistent key), players, bundle, age, idle time, pending close
@@ -2150,6 +2178,34 @@ rundot rooms close-cancel <close-id>
 # The game's room logs, one page: room code's console.* and this.log, its errors, and each room's lifecycle
 rundot rooms logs [--since <15m|ISO>] [--until <15m|ISO>] [--room <code-or-id>] [--type <roomType>]
                   [--level <debug|info|warn|error>] [--limit <lines>] [--json]
+
+# One live room now: bundle, instance, CPU, crashes, and from its instance: throttled, players, idle timer, last save, heap
+rundot rooms inspect <code> [--json]
+rundot rooms inspect --type <roomType> --key <persistentKey> [--json]
+
+# The game's room health per UTC day, then its rooms, players and CPU now
+rundot rooms stats [--days <1-30>] [--json]
+
+# Save one live room's state now, and report whether it landed
+rundot rooms save <code> [--no-wait] [--json]
+rundot rooms save --type <roomType> --key <persistentKey> [--no-wait] [--json]
+
+# End one live room now, even if its save fails; shows the room, then confirms (or --yes)
+rundot rooms kill <code> [--yes] [--no-wait] [--json]
+rundot rooms kill --type <roomType> --key <persistentKey> [--yes] [--no-wait] [--json]
+
+# Stored room state: list it, download one room's as JSON, delete one, or clear old singleton versions
+rundot rooms state list [--type <roomType>] [--kind persistent|singleton] [--cursor <cursor>] [--json]
+rundot rooms state get --type <roomType> (--key <persistentKey> | --version <bundleVersion>) [-o <file>]
+rundot rooms state delete --type <roomType> (--key <persistentKey> | --version <bundleVersion> | --stale) [--yes] [--json]
+
+# The game's database (this.services.db): list keys, usage against the quota, read or export, delete
+rundot rooms db list [--prefix <prefix>] [--cursor <cursor>] [--json]
+rundot rooms db usage [--prefix <prefix>] [--json]
+rundot rooms db get <key> [-o <file>]
+rundot rooms db get (--prefix <prefix> | --all) -o <file.ndjson>
+rundot rooms db delete <key>... [--yes] [--json]          # up to 100 keys
+rundot rooms db delete (--prefix <prefix> | --all) [--yes] [--json]
 ```
 
 - **What a close does:** players are told their room ended. Persistent rooms save, and come back with their world on the next join, on the new bundle. Standard and match rooms come back empty.
@@ -2163,6 +2219,20 @@ rundot rooms logs [--since <15m|ISO>] [--until <15m|ISO>] [--room <code-or-id>] 
 - `logs` reads one page: by default the last hour and 100 lines (`--limit` up to 200). The server sends the newest lines first; they print oldest first, as `time  LEVEL  ROOM  message`. A message's later lines (a stack) are indented under it, and control and format characters print as `\u{XXXX}`, so a logged string can't fake a line or drive the terminal. `ABCDEF#1` is room `ABCDEF` after its first crash recovery. `--since`/`--until` take a duration back from now (`30s`, `15m`, `2h`, `3d`) or an ISO time. When older lines exist, it prints the whole command for the next page: the same filters with fixed `--since`/`--until` and `--page`, as `--flag=value`, quoted so it pastes the same into a POSIX shell, PowerShell or cmd. If a value has characters no single quoting covers for all three, it lists the flags to add instead.
 - What `logs` shows: room code's `console.*` and `this.log` (with any `child` context), errors it throws or logs with their stack, and the platform's lines about each room: started, crashed, recovering, recovered, CPU-throttled, stopped after not shutting down, and ended with why. Each room can log 50 lines or 64 KB per 10 seconds; a `logs dropped` line counts the rest. Lines are kept 30 days, and only from when room logs were switched on in that environment. A 429 means the platform's shared log-read budget is spent and says how long to wait; a 503 means room logs aren't available in that environment yet. `--json` prints the server's response on stdout and nothing else.
 - Stack frames show the source file, line and column when the deployed build carries `dist/server-bundle.js.map` (the multiplayer plugin writes it); cloud-run maps them when it reads the logs. Without a map they show the bundle's line and column.
+- `inspect` takes a join code (any case), or `--type` and `--key` for a persistent room. The live part comes from the instance hosting the room. If the instance doesn't answer within 3 seconds, or stopped heartbeating, or no longer hosts the room, the rest still prints, a `Live details unavailable: <reason>` line says why, and it exits 0. A code that matches no live room exits 1; ended rooms are in `list --ended`. The heap and event loop are sampled every 5 minutes, so a new room shows "not sampled yet".
+- `stats` prints one row per UTC day, newest first (default 7 days, up to 30): rooms started, start failures, crashes, CPU throttles, CPU closes, forced ends, refusals (at the game's CPU cap, for server memory, at the per-player room limit, and at the per-game room limit), the peak game CPU and room count on one instance, and why rooms ended. Then the rooms and players now, and the game's CPU on each instance against its cap. The counts are best-effort: a crashed instance can lose up to a minute of them, rooms on an older room-server revision aren't counted, and counting started when the counter shipped. When the newest day has CPU cap refusals, or an instance is at 80% of its cap or more, a note explains the cap; refusals under the other limits each get a note saying which limit.
+- `save` asks the room code for its state (3 seconds), writes it, and prints its size and time. It reports when the room code didn't answer, the room is recovering from a crash, the write failed, another server holds the room, the room is already ending, or the room keeps no state (standard and match rooms). It exits 0 only when the save landed.
+- **Kill vs close:** a close is graceful. It saves a persistent room first and keeps the room running if that save fails or the room code doesn't answer. `kill` tries the same save, then ends the room either way, and cancels any close still counting down. The room reopens from its last save that landed; players hear their room was lost, not closed, and can't reconnect to it. For a room that keeps no state, `close --room <code>` is the gentler choice.
+- `kill` and `save` wait for the room's server to answer, up to 60 seconds (a kill can take about half a minute while the room's code shuts down). With no answer they say the action may still land and exit 1. `--no-wait` returns once the request is accepted. `kill --json` needs `--yes`, so no prompt mixes into the JSON. A room on an older room-server revision can't be killed or saved: the command says so, and nothing is sent.
+- `state list` reads 100 stored rooms a page and prints the command for the next one. `LIVE` means the room is running now; `STALE` (singletons only) means no tag serves that bundle version any more. Standard and match rooms store no state and aren't listed.
+- `state get` prints one JSON document: the room's metadata, `encoding` (`json`, `zstd` or `legacy`), stored `bytes`, the decoded `state` and `clockSnapshot`. `-o` writes it to a file. A live room's copy is only as fresh as its last save: it warns on stderr, and `rooms save` first gets the current state. No stored state exits 1.
+- `state delete` confirms first (`--yes` skips it; `--json` needs `--yes`). Afterwards the room starts with no saved state the next time it's hosted. It refuses a live room and exits 1, naming its code and the `rooms kill` command to run; if the kill's final save fails, the room's lease lapses within 30 seconds. **Kill then delete only resets a world nobody rejoins in between:** a game that rejoins its persistent key after `lost` hosts the room again, and the delete is refused again, so take players out first. Deleting state that's already gone says "nothing stored" and exits 0.
+- `state delete --stale` lists the type's singleton versions first and names the ones it will delete: those no tag serves (counting a Playground artifact and the `private` tag's own version) and whose room isn't live. Each is checked again as it's deleted, so a version re-tagged mid-run survives; the result lists what was deleted and what was skipped, and why. It exits 0 even when it deleted nothing.
+- A singleton delete (and `--stale`) is refused while a room-server revision that doesn't lease singleton rooms may still be running; try again once it's gone.
+- `db list` shows each key's version, size and last update, 100 to a page. `db usage` shows the size and key count against the quota (5 GiB, 5M keys); with `--prefix` it counts only the keys under it, with no size. Expired keys count until they're removed.
+- `db get <key>` prints the key's entry as JSON (`key`, `value`, `version`, `updatedAt`, `expiresAt` when set). `--prefix` or `--all` export to the `-o` file, one entry per line, with page progress on stderr. An export is a series of reads, not a snapshot. Ctrl+C stops it, keeps the lines written so far, and exits 130. Exports never include which player a key belongs to.
+- `db delete` confirms with the number of matching keys (`--yes` skips it; `--json` needs `--yes`). An empty `--prefix` is refused; `--all` deletes everything. Deletes are unconditional, expired keys included, and a room writing a key at the same time can recreate it. A range delete pages through the keys that existed when it started and prints a running total. It stops after deleting twice the confirmed count or after 30 minutes, says how many keys still match, and exits 1; run it again to go on. A rate limit (429) waits 60 seconds and retries, up to 3 times in a row. Ctrl+C stops it and exits 130.
+- **CPU budget and game cap:** each room has a budget of 50% of one CPU core. A room over it for 30 seconds is throttled (its ticks slow down), and one still over it after 2 minutes is closed. All of a game's rooms on one instance share a cap of 100%. At the cap, that instance refuses new rooms of the game; rooms already running carry on.
 
 ### rooms admin
 
@@ -2197,11 +2267,14 @@ rundot rooms admin close-cancel <close-id>
 # Step 1: Login to RUN.world
 rundot login
 
-# Step 2: Initialize your game
-rundot init
-# Prompts for: Game Name, Description, Build Path, Uses RUN.world SDK
+# Step 2: Start your game from a template
+rundot init --template 2d-pixi my-game
+# Prompts for any game details you did not pass as options
+cd my-game
+npm install
 
-# Step 3: Deploy your game
+# Step 3: Build and deploy your game
+npm run build
 rundot deploy
 
 # Step 4: Make it public (optional)
@@ -2232,9 +2305,11 @@ rundot deploy --bump minor --public
 ```bash
 # Initial setup
 rundot login
-rundot init
+rundot init --template 2d-pixi my-game
+cd my-game && npm install && npm run dev
 
 # First deployment
+npm run build
 rundot deploy
 
 # Iterate on your game...
@@ -2282,25 +2357,30 @@ rundot game add-editors "dev1@example.com dev2@example.com"
 rundot game remove-editors "former-teammate@example.com"
 ```
 
-## Kinetix Pack Build and Catalog (Beta)
+## Native pack commands (retired)
 
-The current beta builds, signs, stores, and catalogs data-only Kinetix packs;
-native iOS mounting is a separate follow-up. Install
-`@series-inc/rundot-syncplay` (which carries the deterministic core) in the game
-project and use Git plus Node.js 22+:
+Native pack builds have been retired. The `pack preflight`, `pack submit`, and
+`pack status` commands remain available to return a retirement error. They do
+not compile, upload, or queue a build. Each command returns exit code 1.
 
-```bash
-rundot pack preflight --commit HEAD
-rundot login --api-key-stdin < key.txt
-rundot pack submit --version <versionId> --commit HEAD
-rundot pack status --version <versionId>
+With `--json`, stdout contains one error object and stderr is empty:
+
+```json
+{"code":"KINETIX_PACK_RETIRED","error":"Native pack builds have been retired."}
 ```
 
-Submit uploads a private temporary ZIP from `git archive` for the resolved full
-commit SHA. Worktree modifications and untracked files are never included. Add
-`--json` to any command for one compact stdout object; progress and errors remain
-on stderr. Status exposes `queued`, `running`, `succeeded`, or `failed`, attempt
-count, stable failure code, and successful artifact/runtime identity fields.
+Without `--json`, the command writes the message to stderr. Existing command
+options remain accepted. These commands do not require login, Git, Node.js,
+or a game project.
+
+The server pack routes keep their existing authorization and rate limits.
+Authorized requests return HTTP 410 with the same error object and
+`Cache-Control: no-store`. Unauthorized requests keep their authorization
+errors.
+
+Syncplay runtime APIs and published compiler exports remain unchanged. The
+hosted pack build service is retired.
+
 
 ## Troubleshooting
 
