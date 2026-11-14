@@ -403,10 +403,10 @@ rundot update
 - Creates a backup of the old executable (.bak file)
 - The update process is automatic and seamless
 
-**Note:** The CLI automatically checks for updates when you run any command and will display a notification if a new version is available.
+**Automatic updates:** when you run a command and a newer version is available, the CLI installs it and then runs your command with the new version. Progress messages go to stderr, so `--json` output stays clean. If the update fails, your command runs with the current version. To turn automatic updates off and only show a notification, set `RUNDOT_NO_AUTO_UPDATE=1` (or `true`).
 
 **Skipping the automatic check:** set `RUNDOT_SKIP_UPDATE_CHECK=1` (or `true`)
-to suppress the passive check entirely — no GitHub request, no notification.
+to suppress the passive check entirely — no GitHub request, no notification, no automatic update.
 Intended for headless callers: the check is unauthenticated (GitHub allows 60
 requests/hour per IP), so it rate-limits on shared CI or container egress IPs,
 and nothing automated can act on the notice anyway. The explicit `rundot
@@ -2194,6 +2194,16 @@ rundot rooms save --type <roomType> --key <persistentKey> [--no-wait] [--json]
 rundot rooms kill <code> [--yes] [--no-wait] [--json]
 rundot rooms kill --type <roomType> --key <persistentKey> [--yes] [--no-wait] [--json]
 
+# Remove one player from one live room (by id, or a username only one player in it has); shows both, then confirms (or --yes)
+rundot rooms kick <code> --player <player> [--block] [--reason <text>] [--yes] [--no-wait] [--json]
+rundot rooms kick --type <roomType> --key <persistentKey> --player <player> [--block] [--reason <text>] [--yes] [--no-wait] [--json]
+
+# Stop new players joining one live room, or lift that lock; players already in it stay
+rundot rooms lock <code> [--no-wait] [--json]
+rundot rooms lock --type <roomType> --key <persistentKey> [--no-wait] [--json]
+rundot rooms unlock <code> [--no-wait] [--json]
+rundot rooms unlock --type <roomType> --key <persistentKey> [--no-wait] [--json]
+
 # Stored room state: list it, download one room's as JSON, delete one, or clear old singleton versions
 rundot rooms state list [--type <roomType>] [--kind persistent|singleton] [--cursor <cursor>] [--json]
 rundot rooms state get --type <roomType> (--key <persistentKey> | --version <bundleVersion>) [-o <file>]
@@ -2223,7 +2233,9 @@ rundot rooms db delete (--prefix <prefix> | --all) [--yes] [--json]
 - `stats` prints one row per UTC day, newest first (default 7 days, up to 30): rooms started, start failures, crashes, CPU throttles, CPU closes, forced ends, refusals (at the game's CPU cap, for server memory, at the per-player room limit, and at the per-game room limit), the peak game CPU and room count on one instance, and why rooms ended. Then the rooms and players now, and the game's CPU on each instance against its cap. The counts are best-effort: a crashed instance can lose up to a minute of them, rooms on an older room-server revision aren't counted, and counting started when the counter shipped. When the newest day has CPU cap refusals, or an instance is at 80% of its cap or more, a note explains the cap; refusals under the other limits each get a note saying which limit.
 - `save` asks the room code for its state (3 seconds), writes it, and prints its size and time. It reports when the room code didn't answer, the room is recovering from a crash, the write failed, another server holds the room, the room is already ending, or the room keeps no state (standard and match rooms). It exits 0 only when the save landed.
 - **Kill vs close:** a close is graceful. It saves a persistent room first and keeps the room running if that save fails or the room code doesn't answer. `kill` tries the same save, then ends the room either way, and cancels any close still counting down. The room reopens from its last save that landed; players hear their room was lost, not closed, and can't reconnect to it. For a room that keeps no state, `close --room <code>` is the gentler choice.
-- `kill` and `save` wait for the room's server to answer, up to 60 seconds (a kill can take about half a minute while the room's code shuts down). With no answer they say the action may still land and exit 1. `--no-wait` returns once the request is accepted. `kill --json` needs `--yes`, so no prompt mixes into the JSON. A room on an older room-server revision can't be killed or saved: the command says so, and nothing is sent.
+- `kill`, `save`, `kick`, `lock` and `unlock` wait for the room's server to answer, up to 60 seconds (a kill can take about half a minute while the room's code shuts down; the others answer at once). With no answer they say the action may still land and exit 1. `--no-wait` returns once the request is accepted. `kill --json` and `kick --json` need `--yes`, so no prompt mixes into the JSON. A room on an older room-server revision can't take the action: the command says so, and nothing is sent. A room that is ending answers that the action wasn't done, and exits 1.
+- `kick` reads the room's players first (as `inspect` does). `--player` takes a player id, or a username exactly one player in the room has; a username two players share is refused, listing their ids. An id that isn't in the room is still sent, since the player may be joining. The kick removes the player's seat, connected or away: the room code hears `onPlayerLeave(playerId, 'kick')`, and a connected player gets `--reason` (at most 200 characters; default "Removed from the room by the game's creator") as an error, then their client gives up the room as `lost`. Without `--block` they can join again. With `--block` every later join of theirs, by code, key, matchmaking or a move, is refused with `KICKED` until the room ends; a persistent or singleton room that is hosted again lets them back in. It prints who was removed, or that the player wasn't in the room, and exits 0 either way. The room's log gets a line per kick.
+- `lock` refuses every new join of the room with `ROOM_LOCKED`, the code the room code's own lock gives, and matchmaking passes over it. Players already in it stay, and away players can come back. The room code and its players aren't told. It lasts until `rooms unlock` or until the room ends (a room hosted again starts unlocked). Locking a locked room says so and exits 0. `unlock` lifts only this lock, never the room code's own: when the room code also has the room locked, it says joins stay refused until the room code unlocks it. Neither prompts. `inspect` shows `Locked:` (by room code, by you, or no) and `Blocked:` (the ids `kick --block` barred), on room servers that report them.
 - `state list` reads 100 stored rooms a page and prints the command for the next one. `LIVE` means the room is running now; `STALE` (singletons only) means no tag serves that bundle version any more. Standard and match rooms store no state and aren't listed.
 - `state get` prints one JSON document: the room's metadata, `encoding` (`json`, `zstd` or `legacy`), stored `bytes`, the decoded `state` and `clockSnapshot`. `-o` writes it to a file. A live room's copy is only as fresh as its last save: it warns on stderr, and `rooms save` first gets the current state. No stored state exits 1.
 - `state delete` confirms first (`--yes` skips it; `--json` needs `--yes`). Afterwards the room starts with no saved state the next time it's hosted. It refuses a live room and exits 1, naming its code and the `rooms kill` command to run; if the kill's final save fails, the room's lease lapses within 30 seconds. **Kill then delete only resets a world nobody rejoins in between:** a game that rejoins its persistent key after `lost` hosts the room again, and the delete is refused again, so take players out first. Deleting state that's already gone says "nothing stored" and exits 0.
