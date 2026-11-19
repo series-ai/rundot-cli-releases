@@ -969,8 +969,8 @@ Marketing budgets accept whole credits only. 1,000 credits = $1 USD.
 Use digits without commas or currency signs. Values must be multiples of
 10 credits. Decimal dollar inputs return a credit-specific error.
 
-    rundot marketing prepare --name launch --budget 50000 --days 14
-    rundot marketing prepare --name ongoing-launch --ongoing --daily-budget 50000
+    rundot marketing prepare --name launch --platforms android --budget 50000 --days 14
+    rundot marketing prepare --name ongoing-launch --platforms android --ongoing --daily-budget 50000
     rundot marketing budget --name launch --credits 100000
 
 The CLI converts credits to integer cents for the server. `--target-cpi` remains
@@ -1007,7 +1007,7 @@ Pass `--campaign-type` to select what ad networks optimize delivery toward:
 
 Example:
 
-    rundot marketing prepare --name launch-engaged --campaign-type engaged-play --budget 280000 --days 14
+    rundot marketing prepare --name launch-engaged --platforms web --web-devices mobile --campaign-type engaged-play --budget 280000 --days 14
 
 ### Web destinations and conversion experiments
 
